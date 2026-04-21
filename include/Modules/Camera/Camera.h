@@ -19,7 +19,7 @@ BEGIN_LOGIC_UNIT(Camera, GV_CHUNK_CAMERA)
     UI_PARAM_FLOAT(rotationRoll, 0.0f, "Roll in radians")
 
     UI_SEPARATOR("Projection")
-    UI_PARAM_FLOAT(fov, 1.0472f, "Field of view in radians")
+    UI_PARAM_FLOAT(fov, 47.0f, "Field of view in degrees")
     UI_PARAM_FLOAT(nearClip, 0.1f, "Near clip plane")
     UI_PARAM_FLOAT(farClip, 1000.0f, "Far clip plane")
     UI_PARAM_BOOL(isPerspective, true, "Use perspective projection")

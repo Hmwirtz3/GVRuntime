@@ -100,7 +100,7 @@ namespace GV
         offset = Align16(offset);
         ptr = base + offset;
 
-        //CameraSystem::AddCamera(cam);
+        CameraSystem::AddCamera(cam);
     }
 
     void Camera::HandleMessage(uint32_t index, const std::string& msg)

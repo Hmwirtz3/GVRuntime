@@ -3,6 +3,7 @@
 #include "Framework/ScenesHandler/SceneLoader.h"
 #include "Framework/MessageHandler/MessageHandler.h"
 #include "Renderer/Renderer.h"
+#include "Modules/Camera/CameraSystem.h"
 
 #include <pspdebug.h>
 #include <pspctrl.h>
@@ -47,27 +48,16 @@ namespace GV
 
         SceneFile scene;
 
-        if (!SceneLoader::Load("test_scene.bin", scene))
+        if (!SceneLoader::Load("Anticlere.bin", scene))
         {
             pspDebugScreenPrintf("Scene load FAILED\n");
             return false;
         }
 
         pspDebugScreenPrintf("Scene loaded\n");
-        pspDebugScreenPrintf("Chunks: %d\n", scene.chunks.size());
 
-        for (size_t i = 0; i < scene.chunks.size() && i < 10; i++)
-        {
-            const SceneChunk& c = scene.chunks[i];
-
-            pspDebugScreenPrintf(
-                "Chunk %d: type=%08X size=%u depth=%d\n",
-                i,
-                c.type,
-                c.size,
-                c.depth
-            );
-        }
+        sceCtrlSetSamplingCycle(0);
+        sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
 
         m_running = true;
         return true;
@@ -88,20 +78,64 @@ namespace GV
                 break;
             }
 
-            SceCtrlData pad;
+            SceCtrlData pad{};
             sceCtrlPeekBufferPositive(&pad, 1);
 
-            if (pad.Buttons & PSP_CTRL_START)
-            {
-                // MessageHandler::Send("RenderCamera");
-            }
+            // -----------------------------
+            // ANALOG INPUT
+            // -----------------------------
+            float ax = (pad.Lx - 128) / 128.0f;
+            float ay = (pad.Ly - 128) / 128.0f;
+
+            const float deadzone = 0.15f;
+            if (ax > -deadzone && ax < deadzone) ax = 0.0f;
+            if (ay > -deadzone && ay < deadzone) ay = 0.0f;
+
+            float moveSpeed = 0.15f;
+            float rotSpeed  = 0.01f;
+
+            // -----------------------------
+            // ROTATION (YAW)
+            // -----------------------------
+            if (pad.Buttons & PSP_CTRL_LTRIGGER)
+                CameraSystem::AddRotation(0.0f, rotSpeed);
+
+            if (pad.Buttons & PSP_CTRL_RTRIGGER)
+                CameraSystem::AddRotation(0.0f, -rotSpeed);
+
+            // -----------------------------
+            // MOVEMENT (matches monolithic runtime)
+            // -----------------------------
+            CameraSystem::MoveForward(ay * moveSpeed);
+            CameraSystem::MoveRight(ax * moveSpeed);
+
+            // -----------------------------
+            // VERTICAL
+            // -----------------------------
+            if (pad.Buttons & PSP_CTRL_TRIANGLE)
+                CameraSystem::MoveUp(moveSpeed);
 
             if (pad.Buttons & PSP_CTRL_CROSS)
-            {
-                // MessageHandler::Send("RenderCamera2");
-                MessageHandler::Send("RenderTexture");
-            }
+                CameraSystem::MoveUp(-moveSpeed);
 
+            // -----------------------------
+            // PITCH
+            // -----------------------------
+            if (pad.Buttons & PSP_CTRL_SQUARE)
+                CameraSystem::AddRotation(rotSpeed, 0.0f);
+
+            // -----------------------------
+            // DEBUG / MESSAGES
+            // -----------------------------
+            if (pad.Buttons & PSP_CTRL_UP)
+                MessageHandler::Send("RenderCamera2");
+
+            if (pad.Buttons & PSP_CTRL_DOWN)
+                MessageHandler::Send("RenderTexture");
+
+            // -----------------------------
+            // RENDER
+            // -----------------------------
             Color32 clearColor;
             clearColor.r = 0;
             clearColor.g = 0;
@@ -110,7 +144,10 @@ namespace GV
 
             m_graphics.BeginFrame(clearColor);
 
+            Renderer::BeginFrame();
+            Renderer::DrawStaticMeshes();
             Renderer::DrawQuads();
+            Renderer::EndFrame();
 
             m_graphics.EndFrame();
         }
@@ -119,7 +156,6 @@ namespace GV
     void Game::Shutdown()
     {
         pspDebugScreenPrintf("Shutting down...\n");
-
         m_graphics.Shutdown();
     }
 }

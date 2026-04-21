@@ -12,5 +12,6 @@ namespace GV
         static void EndFrame();
 
         static void DrawQuads();
+        static void DrawStaticMeshes(); 
     };
 }

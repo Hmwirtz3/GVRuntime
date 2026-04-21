@@ -37,13 +37,15 @@ namespace GV
     {
         Camera& cam = GetActiveCamera();
 
+        float yaw = -cam.rotY;
+
         float cp = std::cos(cam.rotX);
         float sp = std::sin(cam.rotX);
-        float cy = std::cos(cam.rotY);
-        float sy = std::sin(cam.rotY);
+        float cy = std::cos(yaw);
+        float sy = std::sin(yaw);
 
-        float fx = sy * cp;
-        float fy = -sp;
+        float fx = -sy * cp;
+        float fy = sp;
         float fz = cy * cp;
 
         cam.posX += fx * amount;
@@ -55,11 +57,13 @@ namespace GV
     {
         Camera& cam = GetActiveCamera();
 
-        float cy = std::cos(cam.rotY);
-        float sy = std::sin(cam.rotY);
+        float yaw = -cam.rotY;
+
+        float cy = std::cos(yaw);
+        float sy = std::sin(yaw);
 
         float rx = cy;
-        float rz = -sy;
+        float rz = sy;
 
         cam.posX += rx * amount;
         cam.posZ += rz * amount;

@@ -3,8 +3,7 @@
 
 #include "Modules/UI/TexturedQuad.h"
 #include "Modules/Camera/Camera.h"
-//#include "Modules/UI/UI.h"
-//#include "Modules/StaticMesh/StaticMesh.h"
+#include "Modules/StaticMesh/StaticMesh.h"
 
 namespace GV
 {
@@ -38,9 +37,9 @@ namespace GV
                 //     UI::HandleMessage(t.index, msg);
                 //     break;
 
-                // case GV_CHUNK_STATIC_MESH:
-                //     StaticMesh::HandleMessage(t.index, msg);
-                //     break;
+                case GV_CHUNK_STATIC_MESH:
+                    StaticMesh::HandleMessage(t.index, msg);
+                    break;
 
                 default:
                     break;

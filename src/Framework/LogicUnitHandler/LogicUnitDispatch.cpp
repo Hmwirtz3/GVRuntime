@@ -31,7 +31,7 @@ namespace GV
                     
                 case 0x0006:
                     TexturedQuad::Load(bytes, item.start, item.end);
-
+                    break;
 
                 default:
                     break;
