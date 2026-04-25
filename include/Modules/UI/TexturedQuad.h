@@ -33,6 +33,7 @@ namespace GV
         int height;
 
         std::string activateMessage;
+        std::string deactivateMessage;
         
 
         uint32_t textureID;

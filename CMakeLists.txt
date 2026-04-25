@@ -41,7 +41,10 @@ set(SOURCES
 
     src/Renderer/Renderer.cpp
 
+    src/Font/FontRenderer.cpp 
+    src/Font/FontAtlas.cpp
 
+    src/Modules/ControlInput/Controller.cpp
     src/Modules/TextureDictionary/TextureDictionary.cpp
     src/Modules/UI/TexturedQuad.cpp
     src/Modules/StaticMesh/StaticMesh.cpp
@@ -102,7 +105,7 @@ target_link_libraries(${PROJECT_NAME}
 
 create_pbp_file(
     TARGET ${PROJECT_NAME}
-    TITLE "GVRuntime"
+    TITLE "OblivionDemo"
     ICON_PATH NULL
     BACKGROUND_PATH NULL
     PREVIEW_PATH NULL

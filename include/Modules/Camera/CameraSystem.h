@@ -31,10 +31,14 @@ namespace GV
 
         static void Clear();
 
+        static int GetCount();
+
     private:
         static float LerpAngle(float a, float b, float t);
 
         static std::vector<Camera> s_cameras;
         static int s_activeCamera;
+
+        static Camera s_defaultCamera;
     };
 }

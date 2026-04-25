@@ -6,31 +6,63 @@ namespace GV
     std::vector<Camera> CameraSystem::s_cameras;
     int CameraSystem::s_activeCamera = -1;
 
+    Camera CameraSystem::s_defaultCamera =
+    {
+        0.0f, 0.0f, -5.0f,
+        0.0f, 0.0f, 0.0f,
+        47.0f,
+        0.1f,
+        1000.0f
+    };
+
     static float PI() { return 3.14159265359f; }
     static float TWO_PI() { return 6.28318530718f; }
 
-    void CameraSystem::AddCamera(const Camera& cam)
-    {
-        s_cameras.push_back(cam);
-
-        if (s_activeCamera == -1)
-            s_activeCamera = 0;
-    }
-
     Camera& CameraSystem::GetActiveCamera()
     {
+        if (s_cameras.empty())
+            return s_defaultCamera;
+
+        if (s_activeCamera < 0 || s_activeCamera >= (int)s_cameras.size())
+            return s_defaultCamera;
+
         return s_cameras[s_activeCamera];
     }
 
     const Camera& CameraSystem::GetActiveCameraConst()
     {
+        if (s_cameras.empty())
+            return s_defaultCamera;
+
+        if (s_activeCamera < 0 || s_activeCamera >= (int)s_cameras.size())
+            return s_defaultCamera;
+
         return s_cameras[s_activeCamera];
+    }
+
+    void CameraSystem::AddCamera(const Camera& cam)
+    {
+        s_cameras.push_back(cam);
+
+        if (s_activeCamera < 0)
+            s_activeCamera = 0;
     }
 
     void CameraSystem::SetActiveCamera(int index)
     {
         if (index >= 0 && index < (int)s_cameras.size())
             s_activeCamera = index;
+    }
+
+    int CameraSystem::GetCount()
+    {
+        return (int)s_cameras.size();
+    }
+
+    void CameraSystem::Clear()
+    {
+        s_cameras.clear();
+        s_activeCamera = -1;
     }
 
     void CameraSystem::MoveForward(float amount)
@@ -176,11 +208,5 @@ namespace GV
         cam.farClip = from.farClip + (to.farClip - from.farClip) * t;
 
         ClampPitch();
-    }
-
-    void CameraSystem::Clear()
-    {
-        s_cameras.clear();
-        s_activeCamera = -1;
     }
 }

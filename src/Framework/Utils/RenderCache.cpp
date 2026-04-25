@@ -72,6 +72,18 @@ namespace GV
         int32_t existingIndex = FindEntryIndex(type, ownerIndex);
         if (existingIndex >= 0)
         {
+            Entry& existing = m_entries[existingIndex];
+
+            if (existing.valid &&
+                existing.ptr &&
+                existing.size >= size)
+            {
+                existing.dirty = true;
+                existing.lastUsedFrame = m_frameIndex;
+                existing.size = size;
+                return existing.ptr;
+            }
+
             InvalidateEntry(existingIndex);
         }
 
@@ -91,7 +103,7 @@ namespace GV
 
         Entry& e = m_entries[slot];
         e.valid = true;
-        e.dirty = false;
+        e.dirty = true;
         e.type = type;
         e.ownerIndex = ownerIndex;
         e.ptr = ptr;
@@ -131,32 +143,46 @@ namespace GV
         }
     }
 
+    void RenderCache::InvalidateAll(uint32_t type)
+    {
+        for (uint32_t i = 0; i < MAX_ENTRIES; i++)
+        {
+            if (!m_entries[i].valid)
+                continue;
+
+            if (m_entries[i].type == type)
+                InvalidateEntry(i);
+        }
+    }
+
     bool RenderCache::EnsureCapacity(uint32_t size, uint32_t alignment)
     {
-        if (m_allocator.GetFreeBytes() >= size)
+        auto CanFitNow = [&]() -> bool
         {
+            if (m_allocator.GetFreeBytes() < size)
+                return false;
+
             void* test = m_allocator.Allocate(size, alignment);
-            if (test)
-            {
-                m_allocator.Free(test);
-                return true;
-            }
-        }
+            if (!test)
+                return false;
+
+            m_allocator.Free(test);
+            return true;
+        };
+
+        if (CanFitNow())
+            return true;
 
         while (true)
         {
-            void* test = m_allocator.Allocate(size, alignment);
-            if (test)
-            {
-                m_allocator.Free(test);
-                return true;
-            }
-
             int32_t lru = FindLRUEntryIndex();
             if (lru < 0)
                 return false;
 
             InvalidateEntry(lru);
+
+            if (CanFitNow())
+                return true;
         }
     }
 

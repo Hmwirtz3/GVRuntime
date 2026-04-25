@@ -3,16 +3,48 @@
 #include "Framework/Utils/BinaryReader.h"
 #include "Framework/MessageHandler/MessageHandler.h"
 
-#include <cstdlib>
 #include <cstring>
 
 namespace GV
 {
     static std::vector<StaticMeshInstance> g_meshes;
 
-    static void Align16(const uint8_t*& ptr)
+    static void Align16(const uint8_t*& ptr, const uint8_t* endPtr)
     {
-        ptr = (const uint8_t*)(((uintptr_t)ptr + 15) & ~15);
+        uintptr_t p = (uintptr_t)ptr;
+        p = (p + 15) & ~15;
+        const uint8_t* aligned = (const uint8_t*)p;
+        if (aligned <= endPtr)
+            ptr = aligned;
+    }
+
+    static bool ReadChunkHeaderSafe(const uint8_t*& ptr, const uint8_t* endPtr, GV_ChunkHeader& outHeader)
+    {
+        if (ptr + sizeof(GV_ChunkHeader) > endPtr)
+            return false;
+
+        std::memcpy(&outHeader, ptr, sizeof(GV_ChunkHeader));
+        return true;
+    }
+
+    static bool ReadUInt32Safe(const uint8_t*& ptr, const uint8_t* endPtr, uint32_t& outValue)
+    {
+        if (ptr + sizeof(uint32_t) > endPtr)
+            return false;
+
+        std::memcpy(&outValue, ptr, sizeof(uint32_t));
+        ptr += sizeof(uint32_t);
+        return true;
+    }
+
+    static bool ReadBytesSafe(const uint8_t*& ptr, const uint8_t* endPtr, void* dst, uint32_t size)
+    {
+        if (ptr + size > endPtr)
+            return false;
+
+        std::memcpy(dst, ptr, size);
+        ptr += size;
+        return true;
     }
 
     void StaticMesh::Load(
@@ -24,17 +56,34 @@ namespace GV
         const uint8_t* ptr    = base + start;
         const uint8_t* endPtr = base + end;
 
+        if (start >= bytes.size() || end > bytes.size() || ptr >= endPtr)
+            return;
+
+        if (ptr + sizeof(GV_ChunkHeader) + 4 > endPtr)
+            return;
+
         ptr += sizeof(GV_ChunkHeader) + 4;
 
-        const GV_ChunkHeader* outerHeader = (const GV_ChunkHeader*)ptr;
+        GV_ChunkHeader outerHeader{};
+        if (!ReadChunkHeaderSafe(ptr, endPtr, outerHeader))
+            return;
+
+        if (ptr + sizeof(GV_ChunkHeader) + 4 > endPtr)
+            return;
+
         ptr += sizeof(GV_ChunkHeader) + 4;
 
-        uint32_t paramCount = ReadUInt32(ptr);
+        uint32_t paramCount = 0;
+        if (!ReadUInt32Safe(ptr, endPtr, paramCount))
+            return;
 
         StaticMeshInstance mesh{};
 
         if (paramCount >= 9)
         {
+            if (ptr + (9 * sizeof(float)) > endPtr)
+                return;
+
             mesh.posX = ReadFloat(ptr);
             mesh.posY = ReadFloat(ptr);
             mesh.posZ = ReadFloat(ptr);
@@ -52,101 +101,126 @@ namespace GV
             return;
         }
 
-        Align16(ptr);
+        Align16(ptr, endPtr);
 
         if (ptr + sizeof(GV_ChunkHeader) > endPtr)
-        {
             return;
-        }
 
-        const GV_ChunkHeader* innerWrapper = (const GV_ChunkHeader*)ptr;
-
-        if (innerWrapper->type != GV_CHUNK_STATIC_MESH)
-        {
+        GV_ChunkHeader innerWrapper{};
+        if (!ReadChunkHeaderSafe(ptr, endPtr, innerWrapper))
             return;
-        }
+
+        if (innerWrapper.type != GV_CHUNK_STATIC_MESH)
+            return;
 
         const uint8_t* innerStart = ptr;
+        if (ptr + sizeof(GV_ChunkHeader) + 4 > endPtr)
+            return;
+
         ptr += sizeof(GV_ChunkHeader) + 4;
-        const uint8_t* innerEnd = innerStart + innerWrapper->size;
+
+        const uint8_t* innerEnd = innerStart + innerWrapper.size;
+        if (innerEnd > endPtr)
+            return;
 
         uint32_t currentVertexCount = 0;
         uint32_t currentTextureID = 0;
 
-        PSPVertex* pendingVerts = nullptr;
-        uint32_t pendingCount = 0;
+        std::vector<PSPVertex> pendingVerts;
 
         while (ptr < innerEnd && ptr < endPtr)
         {
             if (ptr + sizeof(GV_ChunkHeader) > innerEnd)
-            {
                 break;
-            }
 
-            const GV_ChunkHeader* h = (const GV_ChunkHeader*)ptr;
+            GV_ChunkHeader h{};
+            if (!ReadChunkHeaderSafe(ptr, innerEnd, h))
+                break;
+
+            if (ptr + sizeof(GV_ChunkHeader) + 4 > innerEnd)
+                break;
+
             ptr += sizeof(GV_ChunkHeader) + 4;
 
-            uint32_t payloadSize = h->size - sizeof(GV_ChunkHeader);
+            if (h.size < sizeof(GV_ChunkHeader))
+                break;
+
+            uint32_t payloadSize = h.size - sizeof(GV_ChunkHeader);
             const uint8_t* payloadStart = ptr;
             const uint8_t* nextChunk = payloadStart + payloadSize;
 
-            switch (h->type)
+            if (nextChunk > innerEnd)
+                break;
+
+            switch (h.type)
             {
                 case GV_CHUNK_STRUCT:
                 {
+                    if (ptr + 16 > nextChunk)
+                        return;
+
                     ptr += 4;
-                    currentVertexCount = *(const uint32_t*)ptr; ptr += 4;
+
+                    if (!ReadUInt32Safe(ptr, nextChunk, currentVertexCount))
+                        return;
+
                     ptr += 8;
                     break;
                 }
 
                 case GV_CHUNK_GEOMETRY:
                 {
-                    size_t size = currentVertexCount * sizeof(PSPVertex);
+                    uint32_t bytesNeeded = currentVertexCount * sizeof(PSPVertex);
 
-                    PSPVertex* dst = (PSPVertex*)malloc(size);
-                    if (!dst)
-                    {
+                    if (ptr + bytesNeeded > nextChunk)
                         return;
+
+                    pendingVerts.resize(currentVertexCount);
+                    if (!pendingVerts.empty())
+                    {
+                        std::memcpy(
+                            pendingVerts.data(),
+                            ptr,
+                            bytesNeeded
+                        );
                     }
 
-                    memcpy(dst, ptr, size);
-
-                    pendingVerts = dst;
-                    pendingCount = currentVertexCount;
-
-                    ptr += size;
+                    ptr += bytesNeeded;
                     break;
                 }
 
                 case GV_CHUNK_MATERIAL:
                 {
-                    currentTextureID = *(const uint32_t*)ptr;
-                    ptr += 4;
+                    if (!ReadUInt32Safe(ptr, nextChunk, currentTextureID))
+                        return;
 
-                    if (pendingVerts)
+                    if (!pendingVerts.empty())
                     {
                         StaticSubmesh sm{};
-                        sm.vertices = pendingVerts;
-                        sm.vertexCount = pendingCount;
+                        sm.vertexCount = (uint32_t)pendingVerts.size();
                         sm.textureID = currentTextureID;
 
+                        PSPVertex* ownedVerts = new PSPVertex[sm.vertexCount];
+                        std::memcpy(
+                            ownedVerts,
+                            pendingVerts.data(),
+                            sm.vertexCount * sizeof(PSPVertex)
+                        );
+
+                        sm.vertices = ownedVerts;
                         mesh.submeshes.push_back(sm);
 
-                        pendingVerts = nullptr;
-                        pendingCount = 0;
+                        pendingVerts.clear();
                     }
                     break;
                 }
 
                 default:
-                {
                     break;
-                }
             }
 
             ptr = nextChunk;
-            Align16(ptr);
+            Align16(ptr, innerEnd);
         }
 
         g_meshes.push_back(mesh);
@@ -157,8 +231,7 @@ namespace GV
         if (index >= g_meshes.size())
             return;
 
-        StaticMeshInstance& mesh = g_meshes[index];
-        mesh.visible = true;
+        g_meshes[index].visible = true;
     }
 
     void StaticMesh::BuildRenderData(uint32_t meshIndex, uint32_t submeshIndex, void* dst)
@@ -169,9 +242,9 @@ namespace GV
         MeshGpuData* out = (MeshGpuData*)dst;
 
         PSPVertex* verts = (PSPVertex*)(out + 1);
-        size_t size = sm.vertexCount * sizeof(PSPVertex);
+        uint32_t size = sm.vertexCount * sizeof(PSPVertex);
 
-        memcpy(verts, sm.vertices, size);
+        std::memcpy(verts, sm.vertices, size);
 
         out->textureID = sm.textureID;
         out->vertexCount = sm.vertexCount;

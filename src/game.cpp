@@ -4,6 +4,9 @@
 #include "Framework/MessageHandler/MessageHandler.h"
 #include "Renderer/Renderer.h"
 #include "Modules/Camera/CameraSystem.h"
+#include "Modules/ControlInput/Controller.h"
+#include "Font/FontRenderer.h"
+#include "Font/FontAtlas.h"
 
 #include <pspdebug.h>
 #include <pspctrl.h>
@@ -21,12 +24,11 @@ namespace GV
     }
 
     static uint8_t g_renderMemory[2 * 1024 * 1024];
+    static InputController g_controller;
 
     bool Game::Initialize()
     {
         InitDebug();
-
-        pspDebugScreenPrintf("Initializing Game...\n");
 
         PSPSystem::Initialize();
 
@@ -36,25 +38,23 @@ namespace GV
         desc.enableDepth = true;
 
         if (!m_graphics.Initialize(desc))
-        {
-            pspDebugScreenPrintf("Graphics init FAILED\n");
             return false;
-        }
-
-        pspDebugScreenPrintf("Graphics initialized\n");
 
         Renderer::Init(g_renderMemory, sizeof(g_renderMemory));
-        pspDebugScreenPrintf("Renderer initialized\n");
 
         SceneFile scene;
 
-        if (!SceneLoader::Load("Anticlere.bin", scene))
-        {
-            pspDebugScreenPrintf("Scene load FAILED\n");
-            return false;
-        }
+        CameraSystem::Clear();
 
-        pspDebugScreenPrintf("Scene loaded\n");
+        if (!SceneLoader::Load("Anticlere.bin", scene))
+            return false;
+
+        g_controller.OnStart();
+
+        MessageHandler::Send("RenderCamera2");
+
+        InitFontGlyphs();
+        Font_Init();
 
         sceCtrlSetSamplingCycle(0);
         sceCtrlSetSamplingMode(PSP_CTRL_MODE_ANALOG);
@@ -68,7 +68,10 @@ namespace GV
         if (!m_running)
             return;
 
-        pspDebugScreenPrintf("Entering main loop...\n");
+        static bool prevSelectPressed = false;
+        static bool journalOpen = false;
+        static bool hideMenuText = false;
+        static bool prevStartPressed = false;
 
         while (m_running)
         {
@@ -78,64 +81,80 @@ namespace GV
                 break;
             }
 
+            g_controller.OnUpdate(0.0f);
+
             SceCtrlData pad{};
             sceCtrlPeekBufferPositive(&pad, 1);
 
-            // -----------------------------
-            // ANALOG INPUT
-            // -----------------------------
             float ax = (pad.Lx - 128) / 128.0f;
             float ay = (pad.Ly - 128) / 128.0f;
 
             const float deadzone = 0.15f;
-            if (ax > -deadzone && ax < deadzone) ax = 0.0f;
-            if (ay > -deadzone && ay < deadzone) ay = 0.0f;
+
+            if (ax > -deadzone && ax < deadzone)
+                ax = 0.0f;
+
+            if (ay > -deadzone && ay < deadzone)
+                ay = 0.0f;
 
             float moveSpeed = 0.15f;
             float rotSpeed  = 0.01f;
 
-            // -----------------------------
-            // ROTATION (YAW)
-            // -----------------------------
             if (pad.Buttons & PSP_CTRL_LTRIGGER)
                 CameraSystem::AddRotation(0.0f, rotSpeed);
 
             if (pad.Buttons & PSP_CTRL_RTRIGGER)
                 CameraSystem::AddRotation(0.0f, -rotSpeed);
 
-            // -----------------------------
-            // MOVEMENT (matches monolithic runtime)
-            // -----------------------------
             CameraSystem::MoveForward(ay * moveSpeed);
             CameraSystem::MoveRight(ax * moveSpeed);
 
-            // -----------------------------
-            // VERTICAL
-            // -----------------------------
             if (pad.Buttons & PSP_CTRL_TRIANGLE)
                 CameraSystem::MoveUp(moveSpeed);
 
             if (pad.Buttons & PSP_CTRL_CROSS)
                 CameraSystem::MoveUp(-moveSpeed);
 
-            // -----------------------------
-            // PITCH
-            // -----------------------------
             if (pad.Buttons & PSP_CTRL_SQUARE)
                 CameraSystem::AddRotation(rotSpeed, 0.0f);
 
-            // -----------------------------
-            // DEBUG / MESSAGES
-            // -----------------------------
             if (pad.Buttons & PSP_CTRL_UP)
                 MessageHandler::Send("RenderCamera2");
 
             if (pad.Buttons & PSP_CTRL_DOWN)
-                MessageHandler::Send("RenderTexture");
+                MessageHandler::Send("RenderJournal");
 
-            // -----------------------------
-            // RENDER
-            // -----------------------------
+            bool selectPressed = (pad.Buttons & PSP_CTRL_SELECT) != 0;
+
+            if (selectPressed && !prevSelectPressed)
+            {
+                if (journalOpen)
+                    MessageHandler::Send("CloseJournal");
+                else
+                    MessageHandler::Send("RenderJournal");
+
+                journalOpen = !journalOpen;
+            }
+
+            bool startPressed = (pad.Buttons & PSP_CTRL_START) != 0;
+
+            if (startPressed && !prevStartPressed)
+            {
+                SceneFile scene2;
+
+                CameraSystem::Clear();
+
+                if (SceneLoader::Load("Daggerfall.bin", scene2))
+                {
+                    hideMenuText = true;
+                }
+
+                MessageHandler::Send("tests");
+            }
+
+            prevSelectPressed = selectPressed;
+            prevStartPressed = startPressed;
+
             Color32 clearColor;
             clearColor.r = 0;
             clearColor.g = 0;
@@ -145,8 +164,30 @@ namespace GV
             m_graphics.BeginFrame(clearColor);
 
             Renderer::BeginFrame();
+
             Renderer::DrawStaticMeshes();
             Renderer::DrawQuads();
+
+            BeginUI();
+            Font_Begin();
+            if (!hideMenuText)
+            {
+                
+
+                DrawText("Continue", 60.0f, 200.0f, 0xFF5A6F86);
+                DrawText("New",      140.0f, 200.0f, 0xFF2F3E4E);
+                DrawText("Load",     200.0f, 200.0f, 0xFF2F3E4E);
+                DrawText("Options",  260.0f, 200.0f, 0xFF2F3E4E);
+                DrawText("Credits",  340.0f, 200.0f, 0xFF2F3E4E);
+                DrawText("Exit",     420.0f, 200.0f, 0xFF2F3E4E);
+                
+
+                
+            }
+            DrawDebug();
+
+             Font_End();
+
             Renderer::EndFrame();
 
             m_graphics.EndFrame();
@@ -155,7 +196,6 @@ namespace GV
 
     void Game::Shutdown()
     {
-        pspDebugScreenPrintf("Shutting down...\n");
         m_graphics.Shutdown();
     }
 }

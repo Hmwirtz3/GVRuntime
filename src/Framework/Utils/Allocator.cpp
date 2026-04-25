@@ -77,29 +77,33 @@ namespace GV
 
             const uint32_t blockStart = block.offset;
             const uint32_t blockEnd   = block.offset + block.size;
-
             const uint32_t alignedStart = AlignUp(blockStart, alignment);
 
-            if (alignedStart < blockStart || alignedStart > blockEnd)
+            if (alignedStart < blockStart)
+            {
+                index = block.next;
+                continue;
+            }
+
+            if (alignedStart > blockEnd)
+            {
+                index = block.next;
+                continue;
+            }
+
+            if (alignedStart + size < alignedStart)
+            {
+                index = block.next;
+                continue;
+            }
+
+            if (alignedStart + size > blockEnd)
             {
                 index = block.next;
                 continue;
             }
 
             const uint32_t padding = alignedStart - blockStart;
-
-            if (padding > block.size)
-            {
-                index = block.next;
-                continue;
-            }
-
-            if (size > (block.size - padding))
-            {
-                index = block.next;
-                continue;
-            }
-
             const uint32_t allocEnd = alignedStart + size;
             const uint32_t trailing = blockEnd - allocEnd;
 
@@ -151,7 +155,7 @@ namespace GV
             }
 
             // Case 3: no prefix, but suffix remains
-            if (padding == 0 && trailing > 0)
+            if (trailing > 0)
             {
                 int32_t tailIndex = FindFreeBlockSlot();
                 if (tailIndex == -1)

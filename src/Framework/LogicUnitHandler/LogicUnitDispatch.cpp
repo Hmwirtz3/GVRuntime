@@ -6,6 +6,7 @@
 #include "Modules/UI/TexturedQuad.h"
 #include "Modules/StaticMesh/StaticMesh.h"
 #include "Modules/Camera/Camera.h"
+#include "Modules/ControlInput/Controller.h"
 
 namespace GV
 {
@@ -31,6 +32,9 @@ namespace GV
                     
                 case 0x0006:
                     TexturedQuad::Load(bytes, item.start, item.end);
+                    break;
+                case 0x0014:
+                    InputController::Load(bytes, item.start, item.end);
                     break;
 
                 default:

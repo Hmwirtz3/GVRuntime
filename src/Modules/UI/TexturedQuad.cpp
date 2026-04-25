@@ -4,18 +4,108 @@
 #include "Framework/Chunk/ChunkTypes.h"
 #include "Framework/MessageHandler/MessageHandler.h"
 
-#include <cstdio>
 #include <vector>
 #include <string>
+#include <cstring>
 
 namespace GV
 {
     static std::vector<TexturedQuadData> g_quads;
 
-    static void Align16(const uint8_t*& ptr)
+    static void Align16(const uint8_t*& ptr, const uint8_t* endPtr)
     {
-        uintptr_t p = ((uintptr_t)ptr + 15) & ~15;
-        ptr = (const uint8_t*)p;
+        uintptr_t p = (uintptr_t)ptr;
+        p = (p + 15) & ~15;
+
+        const uint8_t* aligned = (const uint8_t*)p;
+
+        if (aligned <= endPtr)
+            ptr = aligned;
+    }
+
+    static bool ReadChunkHeaderSafe(
+        const uint8_t*& ptr,
+        const uint8_t* endPtr,
+        GV_ChunkHeader& outHeader)
+    {
+        if (ptr + sizeof(GV_ChunkHeader) > endPtr)
+            return false;
+
+        std::memcpy(&outHeader, ptr, sizeof(GV_ChunkHeader));
+        return true;
+    }
+
+    static bool ReadUInt32Safe(
+        const uint8_t*& ptr,
+        const uint8_t* endPtr,
+        uint32_t& outValue)
+    {
+        if (ptr + sizeof(uint32_t) > endPtr)
+            return false;
+
+        std::memcpy(&outValue, ptr, sizeof(uint32_t));
+        ptr += sizeof(uint32_t);
+        return true;
+    }
+
+    static bool ReadIntSafe(
+        const uint8_t*& ptr,
+        const uint8_t* endPtr,
+        int& outValue)
+    {
+        if (ptr + sizeof(int) > endPtr)
+            return false;
+
+        std::memcpy(&outValue, ptr, sizeof(int));
+        ptr += sizeof(int);
+        return true;
+    }
+
+    static bool ReadFloatSafe(
+        const uint8_t*& ptr,
+        const uint8_t* endPtr,
+        float& outValue)
+    {
+        if (ptr + sizeof(float) > endPtr)
+            return false;
+
+        std::memcpy(&outValue, ptr, sizeof(float));
+        ptr += sizeof(float);
+        return true;
+    }
+
+    static bool ReadBoolSafe(
+        const uint8_t*& ptr,
+        const uint8_t* endPtr,
+        bool& outValue)
+    {
+        if (ptr + sizeof(uint8_t) > endPtr)
+            return false;
+
+        uint8_t v = *ptr;
+        ptr += sizeof(uint8_t);
+
+        outValue = (v != 0);
+        return true;
+    }
+
+    static bool ReadStringSafe(
+        const uint8_t*& ptr,
+        const uint8_t* endPtr,
+        std::string& outValue)
+    {
+        uint32_t len = 0;
+
+        if (!ReadUInt32Safe(ptr, endPtr, len))
+            return false;
+
+        if (ptr + len > endPtr)
+            return false;
+
+        outValue.assign((const char*)ptr, len);
+        ptr += len;
+
+        return true;
     }
 
     void TexturedQuad::Load(
@@ -23,44 +113,65 @@ namespace GV
         uint32_t start,
         uint32_t end)
     {
-        const uint8_t* ptr = bytes.data() + start;
-        const uint8_t* endPtr = bytes.data() + end;
+        const uint8_t* base = bytes.data();
+        const uint8_t* ptr = base + start;
+        const uint8_t* endPtr = base + end;
 
-        if (ptr >= endPtr)
+        if (start >= bytes.size() || end > bytes.size() || ptr >= endPtr)
             return;
 
-        const GV_ChunkHeader* objHeader = (const GV_ChunkHeader*)ptr;
-        (void)objHeader;
-        ptr += sizeof(GV_ChunkHeader);
+        // Skip SceneObject header
+        ptr += sizeof(GV_ChunkHeader) + 4;
 
-        const GV_ChunkHeader* header = (const GV_ChunkHeader*)ptr;
-        (void)header;
-        ptr += sizeof(GV_ChunkHeader);
+        // Read inner chunk header
+        GV_ChunkHeader header{};
+        if (!ReadChunkHeaderSafe(ptr, endPtr, header))
+            return;
 
-        Align16(ptr);
+        if (header.type != GV_CHUNK_TEXTURE)
+            return;
 
-        uint32_t paramCount = ReadUInt32(ptr);
-        (void)paramCount;
+        const uint8_t* innerStart = ptr;
+        const uint8_t* innerEnd = innerStart + header.size;
+
+        if (innerEnd > endPtr)
+            return;
+
+        // Move into chunk payload
+        ptr += sizeof(GV_ChunkHeader) + 4;
+
+        uint32_t paramCount = 0;
+        if (!ReadUInt32Safe(ptr, innerEnd, paramCount))
+            return;
+
+        if (paramCount < 7)
+            return;
 
         TexturedQuadData q{};
 
-        q.posX = ReadFloat(ptr);
-        q.posY = ReadFloat(ptr);
-        q.width = ReadInt(ptr);
-        q.height = ReadInt(ptr);
-        q.visible = ReadBool(ptr);
+        if (!ReadFloatSafe(ptr, innerEnd, q.posX)) return;
+        if (!ReadFloatSafe(ptr, innerEnd, q.posY)) return;
+        if (!ReadIntSafe(ptr, innerEnd, q.width)) return;
+        if (!ReadIntSafe(ptr, innerEnd, q.height)) return;
+        if (!ReadBoolSafe(ptr, innerEnd, q.visible)) return;
+        if (!ReadStringSafe(ptr, innerEnd, q.activateMessage)) return;
+        if (!ReadStringSafe(ptr, innerEnd, q.deactivateMessage)) return;
 
-        const char* activateMsg = ReadString(ptr);
-        q.activateMessage = activateMsg;
+        // Move to payload after chunk
+        ptr = innerEnd;
+        Align16(ptr, endPtr);
 
-        Align16(ptr);
-
-        q.textureID = ReadUInt32(ptr);
+        if (!ReadUInt32Safe(ptr, endPtr, q.textureID))
+            return;
 
         uint32_t index = (uint32_t)g_quads.size();
         g_quads.push_back(q);
 
-        MessageHandler::Register(q.activateMessage, GV_CHUNK_TEXTURE, index);
+        if (!q.activateMessage.empty())
+            MessageHandler::Register(q.activateMessage, GV_CHUNK_TEXTURE, index);
+
+        if (!q.deactivateMessage.empty())
+            MessageHandler::Register(q.deactivateMessage, GV_CHUNK_TEXTURE, index);
     }
 
     void TexturedQuad::HandleMessage(uint32_t index, const std::string& msg)
@@ -71,9 +182,10 @@ namespace GV
         TexturedQuadData& q = g_quads[index];
 
         if (msg == q.activateMessage)
-        {
             q.visible = true;
-        }
+
+        if (msg == q.deactivateMessage)
+            q.visible = false;
     }
 
     void TexturedQuad::BuildRenderData(uint32_t index, void* dst)

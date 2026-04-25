@@ -5,37 +5,63 @@
 
 #include <cstdint>
 #include <pspgu.h>
+#include <vector>
 
 namespace GV
 {
+    // --------------------------------------------------
+    // Align helper
+    // --------------------------------------------------
     static void Align16(const uint8_t*& ptr)
     {
         ptr = (const uint8_t*)(((uintptr_t)ptr + 15) & ~15);
     }
 
-    #define MAX_TEXTURES 256
-
+    // --------------------------------------------------
+    // Runtime texture storage (unbounded)
+    // --------------------------------------------------
     struct TextureRuntime
     {
+        uint32_t id = 0;
         uint32_t width = 0;
         uint32_t height = 0;
         uint32_t bufferWidth = 0;
         uint32_t format = 0;
         const void* data = nullptr;
+        uint32_t dataSize = 0;
     };
 
-    static TextureRuntime g_textures[MAX_TEXTURES];
+    static std::vector<TextureRuntime> g_textures;
 
+    // --------------------------------------------------
+    // Lookup
+    // --------------------------------------------------
+    static TextureRuntime* FindTexture(uint32_t id)
+    {
+        for (size_t i = 0; i < g_textures.size(); i++)
+        {
+            if (g_textures[i].id == id)
+                return &g_textures[i];
+        }
+        return nullptr;
+    }
+
+    // --------------------------------------------------
+    // Load (no dropping textures)
+    // --------------------------------------------------
     void TextureDictionary::Load(
         const std::vector<uint8_t>& bytes,
         uint32_t start,
         uint32_t end)
     {
-        const uint8_t* ptr = bytes.data() + start;
-        const uint8_t* endPtr = bytes.data() + end;
+        const uint8_t* base = bytes.data();
+        const uint8_t* ptr = base + start;
+        const uint8_t* endPtr = base + end;
 
         if (ptr >= endPtr)
             return;
+
+        g_textures.clear();
 
         const uint8_t* dictStart = ptr;
         const GV_ChunkHeader* dictHeader = (const GV_ChunkHeader*)ptr;
@@ -57,6 +83,9 @@ namespace GV
 
             const uint8_t* chunkEnd = chunkStart + header->size;
 
+            if (chunkEnd > dictEnd)
+                break;
+
             if (header->type == GV_CHUNK_TEXTURE_NATIVE)
             {
                 uint32_t textureID = ReadUInt32(ptr);
@@ -66,22 +95,26 @@ namespace GV
                 uint32_t dataSize  = ReadUInt32(ptr);
 
                 Align16(ptr);
+                
                 const uint8_t* pixelData = ptr;
 
-                if (textureID < MAX_TEXTURES)
-                {
-                    g_textures[textureID].width       = width;
-                    g_textures[textureID].height      = height;
-                    g_textures[textureID].format      = format;
-                    g_textures[textureID].data        = pixelData;
-                    g_textures[textureID].bufferWidth = width;
-                }
+                TextureRuntime tex{};
+                tex.id = textureID;
+                tex.width = width;
+                tex.height = height;
+                tex.format = format;
+                tex.data = pixelData;
+                tex.bufferWidth = width;
+                tex.dataSize = dataSize;
+
+                g_textures.push_back(tex);
 
                 ptr += dataSize;
             }
             else
             {
-                ptr += (header->size - sizeof(GV_ChunkHeader) - 4);
+                uint32_t skip = header->size - sizeof(GV_ChunkHeader) - 4;
+                ptr += skip;
             }
 
             ptr = chunkEnd;
@@ -89,19 +122,19 @@ namespace GV
         }
     }
 
+    // --------------------------------------------------
+    // Bind
+    // --------------------------------------------------
     void TextureDictionary::Bind(uint32_t textureID)
     {
-        if (textureID >= MAX_TEXTURES)
-            return;
+        TextureRuntime* tex = FindTexture(textureID);
 
-        const TextureRuntime& tex = g_textures[textureID];
-
-        if (!tex.data)
+        if (!tex || !tex->data)
             return;
 
         sceGuEnable(GU_TEXTURE_2D);
 
-        switch (tex.format)
+        switch (tex->format)
         {
         case 0:
             sceGuTexMode(GU_PSM_5650, 0, 0, GU_FALSE);
@@ -118,8 +151,7 @@ namespace GV
             break;
         }
 
-        sceGuTexImage(0, tex.width, tex.height, tex.bufferWidth, tex.data);
-
+        sceGuTexImage(0, tex->width, tex->height, tex->bufferWidth, tex->data);
         sceGuTexFunc(GU_TFX_REPLACE, GU_TCC_RGBA);
         sceGuTexFilter(GU_LINEAR, GU_LINEAR);
         sceGuTexWrap(GU_REPEAT, GU_REPEAT);
