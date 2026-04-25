@@ -1,4 +1,5 @@
 #include "Renderer/Renderer.h"
+#include "Framework/Utils/Profiler.h"
 
 #include "Modules/UI/TexturedQuad.h"
 #include "Modules/StaticMesh/StaticMesh.h"
@@ -15,6 +16,8 @@ namespace GV
 
     static void SetupCamera()
     {
+        PROFILE_SCOPE("SetupCamera");
+
         const Camera& cam = CameraSystem::GetActiveCamera();
 
         sceGumMatrixMode(GU_PROJECTION);
@@ -48,19 +51,17 @@ namespace GV
         sceGumUpdateMatrix();
     }
 
-    // --------------------------------------------------
-    // Init
-    // --------------------------------------------------
     void Renderer::Init(void* memory, uint32_t size)
     {
+        PROFILE_SCOPE("Renderer::Init");
         g_renderCache.Init(memory, size);
+       
     }
 
-    // --------------------------------------------------
-    // Frame Begin
-    // --------------------------------------------------
     void Renderer::BeginFrame()
     {
+        PROFILE_SCOPE("Renderer::BeginFrame");
+
         g_renderCache.BeginFrame();
 
         sceGuClearDepth(65535);
@@ -74,18 +75,15 @@ namespace GV
         SetupCamera();
     }
 
-    // --------------------------------------------------
-    // Frame End
-    // --------------------------------------------------
     void Renderer::EndFrame()
     {
+        PROFILE_SCOPE("Renderer::EndFrame");
     }
 
-    // --------------------------------------------------
-    // QUAD RENDERING
-    // --------------------------------------------------
     void Renderer::DrawQuads()
     {
+        PROFILE_SCOPE("Renderer::DrawQuads");
+
         const uint32_t count = TexturedQuad::GetCount();
         if (count == 0)
             return;
@@ -94,7 +92,6 @@ namespace GV
         sceGuDisable(GU_CULL_FACE);
         sceGuDisable(GU_LIGHTING);
         sceGuEnable(GU_TEXTURE_2D);
-
 
         sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGB);
         sceGuTexFilter(GU_LINEAR, GU_LINEAR);
@@ -116,6 +113,8 @@ namespace GV
 
             if (!entry || entry->dirty)
             {
+                PROFILE_SCOPE("QuadBuild");
+
                 void* ptr = g_renderCache.Allocate(
                     RCACHE_TEXTURED_QUAD,
                     i,
@@ -127,6 +126,9 @@ namespace GV
 
                 TexturedQuad::BuildRenderData(i, ptr);
                 entry = g_renderCache.Get(RCACHE_TEXTURED_QUAD, i);
+
+                if (entry)
+                    entry->dirty = false;
             }
 
             if (!entry || !entry->ptr)
@@ -142,7 +144,6 @@ namespace GV
 
             sceKernelDcacheWritebackRange(data->verts, sizeof(data->verts));
 
-            
             sceGuDrawArray(
                 GU_TRIANGLES,
                 GU_TEXTURE_32BITF | GU_VERTEX_32BITF | GU_TRANSFORM_2D,
@@ -150,14 +151,12 @@ namespace GV
                 0,
                 data->verts);
         }
-        
     }
 
-    // --------------------------------------------------
-    // STATIC MESH RENDERING
-    // --------------------------------------------------
     void Renderer::DrawStaticMeshes()
     {
+        PROFILE_SCOPE("Renderer::DrawStaticMeshes");
+
         const uint32_t meshCount = StaticMesh::GetCount();
         if (meshCount == 0)
             return;
@@ -166,17 +165,16 @@ namespace GV
         sceGuEnable(GU_CULL_FACE);
         sceGuFrontFace(GU_CCW);
         sceGuDisable(GU_LIGHTING);
-        
 
         sceGuDepthRange(0, 65535);
         sceGuDepthFunc(GU_LEQUAL);
         sceGuDepthMask(GU_FALSE);
+
         
-        sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
         sceGuTexFilter(GU_LINEAR, GU_LINEAR);
         sceGuTexScale(1.0f, 1.0f);
         sceGuTexOffset(0.0f, 0.0f);
-        
+
         sceGuColor(0xFFFFFFFF);
 
         uint32_t currentTex = 0xFFFFFFFF;
@@ -194,11 +192,14 @@ namespace GV
             {
                 const uint32_t cacheIndex = (i << 16) | s;
 
+                
                 RenderCache::Entry* entry =
                     g_renderCache.Get(RCACHE_STATIC_MESH, cacheIndex);
 
-                if (!entry || entry->dirty)
+                if (!entry)
                 {
+                    PROFILE_SCOPE("MeshCacheMiss");
+
                     const uint32_t vertexCount = mesh.submeshes[s].vertexCount;
 
                     void* ptr = g_renderCache.Allocate(
@@ -212,6 +213,30 @@ namespace GV
 
                     StaticMesh::BuildRenderData(i, s, ptr);
                     entry = g_renderCache.Get(RCACHE_STATIC_MESH, cacheIndex);
+
+                    if (entry)
+                        entry->dirty = false;
+                }
+                else if (entry->dirty)
+                {
+                    PROFILE_SCOPE("MeshDirtyBuild");
+
+                    const uint32_t vertexCount = mesh.submeshes[s].vertexCount;
+
+                    void* ptr = g_renderCache.Allocate(
+                        RCACHE_STATIC_MESH,
+                        cacheIndex,
+                        sizeof(MeshGpuData) + vertexCount * sizeof(PSPVertex),
+                        64);
+
+                    if (!ptr)
+                        continue;
+
+                    StaticMesh::BuildRenderData(i, s, ptr);
+                    entry = g_renderCache.Get(RCACHE_STATIC_MESH, cacheIndex);
+
+                    if (entry)
+                        entry->dirty = false;
                 }
 
                 if (!entry || !entry->ptr)
@@ -225,6 +250,7 @@ namespace GV
                     currentTex = data->textureID;
                 }
 
+                sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
                 sceGumMatrixMode(GU_MODEL);
                 sceGumLoadIdentity();
 
@@ -253,7 +279,6 @@ namespace GV
                     data->verts,
                     data->vertexCount * sizeof(PSPVertex));
 
-                sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
                 sceGumDrawArray(
                     GU_TRIANGLES,
                     GU_TEXTURE_16BIT | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
@@ -262,6 +287,5 @@ namespace GV
                     data->verts);
             }
         }
-
     }
 }

@@ -1,4 +1,5 @@
 #include "Framework/Utils/RenderCache.h"
+#include "Framework/Utils/Profiler.h"
 
 namespace GV
 {
@@ -78,7 +79,6 @@ namespace GV
                 existing.ptr &&
                 existing.size >= size)
             {
-                existing.dirty = true;
                 existing.lastUsedFrame = m_frameIndex;
                 existing.size = size;
                 return existing.ptr;
@@ -92,7 +92,13 @@ namespace GV
 
         void* ptr = m_allocator.Allocate(size, alignment);
         if (!ptr)
+        {
+            /*Log("ALLOC FAIL size=%u free=%u used=%u",
+                size,
+                m_allocator.GetFreeBytes(),
+                m_allocator.GetUsedBytes());*/
             return 0;
+        }
 
         int32_t slot = FindFreeEntrySlot();
         if (slot < 0)
@@ -157,20 +163,7 @@ namespace GV
 
     bool RenderCache::EnsureCapacity(uint32_t size, uint32_t alignment)
     {
-        auto CanFitNow = [&]() -> bool
-        {
-            if (m_allocator.GetFreeBytes() < size)
-                return false;
-
-            void* test = m_allocator.Allocate(size, alignment);
-            if (!test)
-                return false;
-
-            m_allocator.Free(test);
-            return true;
-        };
-
-        if (CanFitNow())
+        if (m_allocator.GetFreeBytes() >= size)
             return true;
 
         while (true)
@@ -181,7 +174,7 @@ namespace GV
 
             InvalidateEntry(lru);
 
-            if (CanFitNow())
+            if (m_allocator.GetFreeBytes() >= size)
                 return true;
         }
     }
@@ -232,6 +225,8 @@ namespace GV
 
     int32_t RenderCache::FindEntryIndex(uint32_t type, uint32_t ownerIndex) const
     {
+        (void)type;
+
         for (uint32_t i = 0; i < MAX_ENTRIES; i++)
         {
             const Entry& e = m_entries[i];
@@ -239,7 +234,7 @@ namespace GV
             if (!e.valid)
                 continue;
 
-            if (e.type == type && e.ownerIndex == ownerIndex)
+            if (e.ownerIndex == ownerIndex)
                 return (int32_t)i;
         }
 

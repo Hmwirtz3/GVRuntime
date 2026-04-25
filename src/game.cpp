@@ -7,7 +7,7 @@
 #include "Modules/ControlInput/Controller.h"
 #include "Font/FontRenderer.h"
 #include "Font/FontAtlas.h"
-
+#include "Framework/Utils/Profiler.h"
 #include <pspdebug.h>
 #include <pspctrl.h>
 #include <pspkernel.h>
@@ -75,6 +75,11 @@ namespace GV
 
         while (m_running)
         {
+            // ----------------------------------
+            // PROFILER RESET (REQUIRED)
+            // ----------------------------------
+            Profiler_Reset();
+
             if (PSPSystem::ShouldExit())
             {
                 m_running = false;
@@ -169,24 +174,27 @@ namespace GV
             Renderer::DrawQuads();
 
             BeginUI();
+
             Font_Begin();
+
             if (!hideMenuText)
             {
-                
-
                 DrawText("Continue", 60.0f, 200.0f, 0xFF5A6F86);
                 DrawText("New",      140.0f, 200.0f, 0xFF2F3E4E);
                 DrawText("Load",     200.0f, 200.0f, 0xFF2F3E4E);
                 DrawText("Options",  260.0f, 200.0f, 0xFF2F3E4E);
                 DrawText("Credits",  340.0f, 200.0f, 0xFF2F3E4E);
                 DrawText("Exit",     420.0f, 200.0f, 0xFF2F3E4E);
-                
-
-                
             }
+
             DrawDebug();
 
-             Font_End();
+            // ----------------------------------
+            // PROFILER DRAW (REQUIRED)
+            // ----------------------------------
+            Profiler_Draw(10.0f, 80.0f);
+
+            Font_End();
 
             Renderer::EndFrame();
 

@@ -160,13 +160,13 @@ void Font_End()
             m_vertexCount * (int)sizeof(FontVertex)
         );
 
-       sceGuDrawArray(
-    GU_TRIANGLES,
-    GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
-    m_vertexCount,
-    0,
-    m_vertexBuffer
-);
+        sceGuDrawArray(
+            GU_TRIANGLES,
+            GU_TEXTURE_32BITF | GU_COLOR_8888 | GU_VERTEX_32BITF | GU_TRANSFORM_3D,
+            m_vertexCount,
+            0,
+            m_vertexBuffer
+        );
     }
 
     sceGuDisable(GU_TEXTURE_2D);
@@ -229,7 +229,6 @@ void DrawText(const char* text, float x, float y, uint32_t color)
         }
 
         DrawChar(g, penX, penY, color);
-
         penX += (float)g.advance;
     }
 }
@@ -255,7 +254,32 @@ void Log(const char* fmt, ...)
 
 void DrawDebug()
 {
+    static uint64_t lastTime = 0;
+    static int frameCount = 0;
+    static float fps = 0.0f;
+
+    uint64_t now = sceKernelGetSystemTimeWide();
+
+    if (lastTime == 0)
+        lastTime = now;
+
+    frameCount++;
+
+    uint64_t delta = now - lastTime;
+
+    if (delta >= 1000000)
+    {
+        fps = (float)frameCount * 1000000.0f / (float)delta;
+        frameCount = 0;
+        lastTime = now;
+    }
+
     float y = 10.0f;
+
+    char fpsText[64];
+    snprintf(fpsText, sizeof(fpsText), "FPS: %.2f", fps);
+    DrawText(fpsText, 10.0f, y, 0xFF00FFFF);
+    y += (float)LINE_HEIGHT;
 
     for (const auto& line : m_lines)
     {

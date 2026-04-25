@@ -65,6 +65,8 @@ namespace GV
             void* dst
         );
 
+        static void Finalize();
+
         static void HandleMessage(uint32_t index, const std::string& msg);
 
         static uint32_t GetCount();
