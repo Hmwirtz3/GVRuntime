@@ -1,41 +1,71 @@
 #include "Modules/StaticMesh/StaticMesh.h"
 #include "Framework/Chunk/ChunkTypes.h"
 #include "Framework/Utils/BinaryReader.h"
-#include "Framework/MessageHandler/MessageHandler.h"
 
-#include <cstdlib>
-#include <cstring>
-#include <algorithm> // <-- added
+#include <algorithm>
 
 namespace GV
 {
     static std::vector<StaticMeshInstance> g_meshes;
-    static bool g_sorted = false;
+    static bool g_batchesBuilt = false;
 
     static void Align16(const uint8_t*& ptr)
     {
         ptr = (const uint8_t*)(((uintptr_t)ptr + 15) & ~15);
     }
 
-    // --------------------------------------------------
-    // NEW: Sort meshes largest → smallest (by vertex count)
-    // --------------------------------------------------
-    static void SortMeshesBySize()
+    void StaticMesh::BuildBatches()
     {
-        std::sort(g_meshes.begin(), g_meshes.end(),
-            [](const StaticMeshInstance& a, const StaticMeshInstance& b)
+        if (g_batchesBuilt)
+            return;
+
+        for (auto& mesh : g_meshes)
+        {
+            mesh.batches.clear();
+
+            if (mesh.submeshes.empty())
+                continue;
+
+            std::sort(mesh.submeshes.begin(), mesh.submeshes.end(),
+                [](const StaticSubmesh& a, const StaticSubmesh& b)
+                {
+                    return a.textureID < b.textureID;
+                });
+
+            uint32_t start = 0;
+            uint32_t currentTex = mesh.submeshes[0].textureID;
+
+            for (uint32_t i = 0; i < mesh.submeshes.size(); i++)
             {
-                uint32_t sizeA = 0;
-                uint32_t sizeB = 0;
+                if (mesh.submeshes[i].textureID != currentTex)
+                {
+                    StaticBatch batch{};
+                    batch.startIndex = start;
+                    batch.count = i - start;
+                    batch.textureID = currentTex;
 
-                for (const auto& sm : a.submeshes)
-                    sizeA += sm.vertexCount;
+                    mesh.batches.push_back(batch);
 
-                for (const auto& sm : b.submeshes)
-                    sizeB += sm.vertexCount;
+                    start = i;
+                    currentTex = mesh.submeshes[i].textureID;
+                }
+            }
 
-                return sizeA > sizeB;
-            });
+            StaticBatch batch{};
+            batch.startIndex = start;
+            batch.count = (uint32_t)mesh.submeshes.size() - start;
+            batch.textureID = currentTex;
+
+            mesh.batches.push_back(batch);
+        }
+
+        g_batchesBuilt = true;
+    }
+
+    void StaticMesh::Finalize()
+    {
+        g_batchesBuilt = false;
+        BuildBatches();
     }
 
     void StaticMesh::Load(
@@ -43,6 +73,8 @@ namespace GV
         uint32_t start,
         uint32_t end)
     {
+        g_batchesBuilt = false;
+
         const uint8_t* base   = bytes.data();
         const uint8_t* ptr    = base + start;
         const uint8_t* endPtr = base + end;
@@ -78,16 +110,12 @@ namespace GV
         Align16(ptr);
 
         if (ptr + sizeof(GV_ChunkHeader) > endPtr)
-        {
             return;
-        }
 
         const GV_ChunkHeader* innerWrapper = (const GV_ChunkHeader*)ptr;
 
         if (innerWrapper->type != GV_CHUNK_STATIC_MESH)
-        {
             return;
-        }
 
         const uint8_t* innerStart = ptr;
         ptr += sizeof(GV_ChunkHeader) + 4;
@@ -102,9 +130,7 @@ namespace GV
         while (ptr < innerEnd && ptr < endPtr)
         {
             if (ptr + sizeof(GV_ChunkHeader) > innerEnd)
-            {
                 break;
-            }
 
             const GV_ChunkHeader* h = (const GV_ChunkHeader*)ptr;
             ptr += sizeof(GV_ChunkHeader) + 4;
@@ -125,20 +151,10 @@ namespace GV
 
                 case GV_CHUNK_GEOMETRY:
                 {
-                    size_t size = currentVertexCount * sizeof(PSPVertex);
-
-                    PSPVertex* dst = (PSPVertex*)malloc(size);
-                    if (!dst)
-                    {
-                        return;
-                    }
-
-                    memcpy(dst, ptr, size);
-
-                    pendingVerts = dst;
+                    pendingVerts = (PSPVertex*)ptr;
                     pendingCount = currentVertexCount;
 
-                    ptr += size;
+                    ptr += currentVertexCount * sizeof(PSPVertex);
                     break;
                 }
 
@@ -163,9 +179,7 @@ namespace GV
                 }
 
                 default:
-                {
                     break;
-                }
             }
 
             ptr = nextChunk;
@@ -175,50 +189,40 @@ namespace GV
         g_meshes.push_back(mesh);
     }
 
-    // --------------------------------------------------
-    // NEW: Sort happens ONCE after all meshes are loaded
-    // --------------------------------------------------
-    void StaticMesh::Finalize()
-    {
-        SortMeshesBySize();
-    }
-
     void StaticMesh::HandleMessage(uint32_t index, const std::string& msg)
     {
         if (index >= g_meshes.size())
             return;
 
-        StaticMeshInstance& mesh = g_meshes[index];
-        mesh.visible = true;
+        g_meshes[index].visible = true;
     }
 
-    void StaticMesh::BuildRenderData(uint32_t meshIndex, uint32_t submeshIndex, void* dst)
+    // --------------------------------------------------
+    // IMPORTANT: batch-aware (no memcpy, no merging)
+    // --------------------------------------------------
+    void StaticMesh::BuildRenderData(
+        uint32_t meshIndex,
+        uint32_t batchIndex,
+        void* dst)
     {
         const StaticMeshInstance& mesh = g_meshes[meshIndex];
-        const StaticSubmesh& sm = mesh.submeshes[submeshIndex];
+        const StaticBatch& batch = mesh.batches[batchIndex];
 
         MeshGpuData* out = (MeshGpuData*)dst;
 
-        PSPVertex* verts = (PSPVertex*)(out + 1);
-        size_t size = sm.vertexCount * sizeof(PSPVertex);
+        // Just use first submesh pointer (renderer loops inside batch)
+        const StaticSubmesh& sm = mesh.submeshes[batch.startIndex];
 
-        memcpy(verts, sm.vertices, size);
-
-        out->textureID = sm.textureID;
+        out->textureID = batch.textureID;
         out->vertexCount = sm.vertexCount;
-        out->verts = verts;
+        out->verts = sm.vertices;
     }
 
-   uint32_t StaticMesh::GetCount()
-{
-    if (!g_sorted)
+    uint32_t StaticMesh::GetCount()
     {
-        SortMeshesBySize();
-        g_sorted = true;
+        BuildBatches();
+        return (uint32_t)g_meshes.size();
     }
-
-    return (uint32_t)g_meshes.size();
-}
 
     const StaticMeshInstance& StaticMesh::Get(uint32_t index)
     {

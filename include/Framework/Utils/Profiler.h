@@ -1,10 +1,27 @@
 #pragma once
+
+#ifdef PROFILER_USE_STUB
+
+struct ProfileScope
+{
+    inline ProfileScope(const char*) {}
+    inline ~ProfileScope() {}
+};
+
+inline void Profiler_Reset() {}
+inline void Profiler_Draw(float, float) {}
+
+#define PROFILE_SCOPE(name) ProfileScope __scope__(name)
+
+#else
+
 #include <pspkernel.h>
 #include <cstdio>
 #include "Font/FontRenderer.h"
 
-// ----------------------------------------
 #define MAX_PROFILE_ENTRIES 64
+
+#define PROFILE_FUNCTION() ProfileScope __func_scope__(__FUNCTION__)
 
 struct ProfileEntry
 {
@@ -13,13 +30,9 @@ struct ProfileEntry
     int calls;
 };
 
-// ----------------------------------------
-// GLOBAL STORAGE (shared across all cpp)
-// ----------------------------------------
 inline ProfileEntry g_profiles[MAX_PROFILE_ENTRIES];
 inline int g_profileCount = 0;
 
-// ----------------------------------------
 inline ProfileEntry* Profiler_Get(const char* name)
 {
     for (int i = 0; i < g_profileCount; i++)
@@ -40,7 +53,6 @@ inline ProfileEntry* Profiler_Get(const char* name)
     return nullptr;
 }
 
-// ----------------------------------------
 inline void Profiler_Reset()
 {
     for (int i = 0; i < g_profileCount; i++)
@@ -50,7 +62,6 @@ inline void Profiler_Reset()
     }
 }
 
-// ----------------------------------------
 struct ProfileScope
 {
     ProfileEntry* entry;
@@ -74,9 +85,8 @@ struct ProfileScope
     }
 };
 
-#define PROFILE_SCOPE(name) ProfileScope __profile_scope__(name)
+#define PROFILE_SCOPE(name) ProfileScope __scope__(name)
 
-// ----------------------------------------
 inline void Profiler_Draw(float x, float y)
 {
     char buf[128];
@@ -97,3 +107,5 @@ inline void Profiler_Draw(float x, float y)
         y += 17.0f;
     }
 }
+
+#endif

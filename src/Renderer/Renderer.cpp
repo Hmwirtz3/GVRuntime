@@ -55,7 +55,6 @@ namespace GV
     {
         PROFILE_SCOPE("Renderer::Init");
         g_renderCache.Init(memory, size);
-       
     }
 
     void Renderer::BeginFrame()
@@ -126,9 +125,6 @@ namespace GV
 
                 TexturedQuad::BuildRenderData(i, ptr);
                 entry = g_renderCache.Get(RCACHE_TEXTURED_QUAD, i);
-
-                if (entry)
-                    entry->dirty = false;
             }
 
             if (!entry || !entry->ptr)
@@ -154,45 +150,81 @@ namespace GV
     }
 
     void Renderer::DrawStaticMeshes()
+{
+    PROFILE_SCOPE("Renderer::DrawStaticMeshes");
+
+    const uint32_t meshCount = StaticMesh::GetCount();
+    if (meshCount == 0)
+        return;
+
+    sceGuEnable(GU_DEPTH_TEST);
+    sceGuEnable(GU_CULL_FACE);
+    sceGuFrontFace(GU_CCW);
+    sceGuDisable(GU_LIGHTING);
+
+    sceGuDepthRange(0, 65535);
+    sceGuDepthFunc(GU_LEQUAL);
+    sceGuDepthMask(GU_FALSE);
+
+    sceGuTexFilter(GU_LINEAR, GU_LINEAR);
+    sceGuTexScale(1.0f, 1.0f);
+    sceGuTexOffset(0.0f, 0.0f);
+
+    sceGuColor(0xFFFFFFFF);
+
+    uint32_t currentTex = 0xFFFFFFFF;
+
+    for (uint32_t i = 0; i < meshCount; i++)
     {
-        PROFILE_SCOPE("Renderer::DrawStaticMeshes");
+        const StaticMeshInstance& mesh = StaticMesh::Get(i);
 
-        const uint32_t meshCount = StaticMesh::GetCount();
-        if (meshCount == 0)
-            return;
+        if (!mesh.visible)
+            continue;
 
-        sceGuEnable(GU_DEPTH_TEST);
-        sceGuEnable(GU_CULL_FACE);
-        sceGuFrontFace(GU_CCW);
-        sceGuDisable(GU_LIGHTING);
+        sceGumMatrixMode(GU_MODEL);
+        sceGumLoadIdentity();
 
-        sceGuDepthRange(0, 65535);
-        sceGuDepthFunc(GU_LEQUAL);
-        sceGuDepthMask(GU_FALSE);
-
-        
-        sceGuTexFilter(GU_LINEAR, GU_LINEAR);
-        sceGuTexScale(1.0f, 1.0f);
-        sceGuTexOffset(0.0f, 0.0f);
-
-        sceGuColor(0xFFFFFFFF);
-
-        uint32_t currentTex = 0xFFFFFFFF;
-
-        for (uint32_t i = 0; i < meshCount; i++)
+        ScePspFVector3 pos =
         {
-            const StaticMeshInstance& mesh = StaticMesh::Get(i);
+            mesh.posX,
+            mesh.posY,
+            mesh.posZ
+        };
 
-            if (!mesh.visible)
-                continue;
+        ScePspFVector3 scale =
+        {
+            mesh.scaleX,
+            mesh.scaleY,
+            mesh.scaleZ
+        };
 
-            const uint32_t submeshCount = (uint32_t)mesh.submeshes.size();
+        sceGumTranslate(&pos);
+        sceGumRotateZ(mesh.rotZ);
+        sceGumRotateY(mesh.rotY);
+        sceGumRotateX(mesh.rotX);
+        sceGumScale(&scale);
+        sceGumUpdateMatrix();
 
-            for (uint32_t s = 0; s < submeshCount; s++)
+        const uint32_t batchCount = (uint32_t)mesh.batches.size();
+
+        for (uint32_t b = 0; b < batchCount; b++)
+        {
+            const StaticBatch& batch = mesh.batches[b];
+
+            if (batch.textureID != currentTex)
             {
-                const uint32_t cacheIndex = (i << 16) | s;
+                TextureDictionary::Bind(batch.textureID);
+                currentTex = batch.textureID;
+            }
 
-                
+            sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
+
+            for (uint32_t j = 0; j < batch.count; j++)
+            {
+                const uint32_t submeshIndex = batch.startIndex + j;
+
+                const uint32_t cacheIndex = (i << 16) | submeshIndex;
+
                 RenderCache::Entry* entry =
                     g_renderCache.Get(RCACHE_STATIC_MESH, cacheIndex);
 
@@ -200,18 +232,18 @@ namespace GV
                 {
                     PROFILE_SCOPE("MeshCacheMiss");
 
-                    const uint32_t vertexCount = mesh.submeshes[s].vertexCount;
+                    const uint32_t vertexCount = mesh.submeshes[submeshIndex].vertexCount;
 
                     void* ptr = g_renderCache.Allocate(
                         RCACHE_STATIC_MESH,
                         cacheIndex,
-                        sizeof(MeshGpuData) + vertexCount * sizeof(PSPVertex),
+                        sizeof(MeshGpuData),
                         64);
 
                     if (!ptr)
                         continue;
 
-                    StaticMesh::BuildRenderData(i, s, ptr);
+                    StaticMesh::BuildRenderData(i, submeshIndex, ptr);
                     entry = g_renderCache.Get(RCACHE_STATIC_MESH, cacheIndex);
 
                     if (entry)
@@ -221,63 +253,17 @@ namespace GV
                 {
                     PROFILE_SCOPE("MeshDirtyBuild");
 
-                    const uint32_t vertexCount = mesh.submeshes[s].vertexCount;
-
-                    void* ptr = g_renderCache.Allocate(
-                        RCACHE_STATIC_MESH,
-                        cacheIndex,
-                        sizeof(MeshGpuData) + vertexCount * sizeof(PSPVertex),
-                        64);
-
-                    if (!ptr)
+                    if (!entry->ptr)
                         continue;
 
-                    StaticMesh::BuildRenderData(i, s, ptr);
-                    entry = g_renderCache.Get(RCACHE_STATIC_MESH, cacheIndex);
-
-                    if (entry)
-                        entry->dirty = false;
+                    StaticMesh::BuildRenderData(i, submeshIndex, entry->ptr);
+                    entry->dirty = false;
                 }
 
                 if (!entry || !entry->ptr)
                     continue;
 
                 MeshGpuData* data = (MeshGpuData*)entry->ptr;
-
-                if (data->textureID != currentTex)
-                {
-                    TextureDictionary::Bind(data->textureID);
-                    currentTex = data->textureID;
-                }
-
-                sceGuTexFunc(GU_TFX_MODULATE, GU_TCC_RGBA);
-                sceGumMatrixMode(GU_MODEL);
-                sceGumLoadIdentity();
-
-                ScePspFVector3 pos =
-                {
-                    mesh.posX,
-                    mesh.posY,
-                    mesh.posZ
-                };
-
-                ScePspFVector3 scale =
-                {
-                    mesh.scaleX,
-                    mesh.scaleY,
-                    mesh.scaleZ
-                };
-
-                sceGumTranslate(&pos);
-                sceGumRotateZ(mesh.rotZ);
-                sceGumRotateY(mesh.rotY);
-                sceGumRotateX(mesh.rotX);
-                sceGumScale(&scale);
-                sceGumUpdateMatrix();
-
-                sceKernelDcacheWritebackRange(
-                    data->verts,
-                    data->vertexCount * sizeof(PSPVertex));
 
                 sceGumDrawArray(
                     GU_TRIANGLES,
@@ -288,4 +274,5 @@ namespace GV
             }
         }
     }
+}
 }

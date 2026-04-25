@@ -184,6 +184,7 @@ namespace GV
         if (!m_impl || !m_impl->initialized)
             return;
 
+        //sceDisplayWaitVblankStart();
         sceGuFinish();
         sceGuSync(0, 0);
         sceDisplayWaitVblankStart();

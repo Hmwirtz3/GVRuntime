@@ -8,6 +8,7 @@
 #include "Font/FontRenderer.h"
 #include "Font/FontAtlas.h"
 #include "Framework/Utils/Profiler.h"
+
 #include <pspdebug.h>
 #include <pspctrl.h>
 #include <pspkernel.h>
@@ -75,10 +76,9 @@ namespace GV
 
         while (m_running)
         {
-            // ----------------------------------
-            // PROFILER RESET (REQUIRED)
-            // ----------------------------------
             Profiler_Reset();
+
+            m_graphics.BeginFrame({ 0, 0, 0, 255 });
 
             if (PSPSystem::ShouldExit())
             {
@@ -86,9 +86,9 @@ namespace GV
                 break;
             }
 
-            g_controller.OnUpdate(0.0f);
-
             SceCtrlData pad{};
+
+            g_controller.OnUpdate(0.0f);
             sceCtrlPeekBufferPositive(&pad, 1);
 
             float ax = (pad.Lx - 128) / 128.0f;
@@ -150,9 +150,7 @@ namespace GV
                 CameraSystem::Clear();
 
                 if (SceneLoader::Load("Daggerfall.bin", scene2))
-                {
                     hideMenuText = true;
-                }
 
                 MessageHandler::Send("tests");
             }
@@ -160,18 +158,10 @@ namespace GV
             prevSelectPressed = selectPressed;
             prevStartPressed = startPressed;
 
-            Color32 clearColor;
-            clearColor.r = 0;
-            clearColor.g = 0;
-            clearColor.b = 0;
-            clearColor.a = 255;
-
-            m_graphics.BeginFrame(clearColor);
-
             Renderer::BeginFrame();
-
             Renderer::DrawStaticMeshes();
             Renderer::DrawQuads();
+            Renderer::EndFrame();
 
             BeginUI();
 
@@ -189,14 +179,9 @@ namespace GV
 
             DrawDebug();
 
-            // ----------------------------------
-            // PROFILER DRAW (REQUIRED)
-            // ----------------------------------
             Profiler_Draw(10.0f, 80.0f);
 
             Font_End();
-
-            Renderer::EndFrame();
 
             m_graphics.EndFrame();
         }

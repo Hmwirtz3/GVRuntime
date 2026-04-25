@@ -4,8 +4,6 @@
 #include "Framework/Chunk/ChunkTypes.h"
 #include "Framework/MessageHandler/MessageHandler.h"
 
-#include "Font/FontRenderer.h"
-
 #include <pspctrl.h>
 #include <cmath>
 
@@ -144,36 +142,30 @@ namespace GV
     }
 
     void InputController::HandleButton(
-    bool current,
-    bool& previous,
-    const std::string& message,
-    bool continuous)
-{
-    if (message.empty())
+        bool current,
+        bool& previous,
+        const std::string& message,
+        bool continuous)
     {
+        if (message.empty())
+        {
+            previous = current;
+            return;
+        }
+
+        if (continuous)
+        {
+            if (current)
+                MessageHandler::Send(message);
+        }
+        else
+        {
+            if (current && !previous)
+                MessageHandler::Send(message);
+        }
+        
         previous = current;
-        return;
     }
-
-    if (continuous)
-    {
-        if (current)
-        {
-            Log("hold: %s", message.c_str());
-            MessageHandler::Send(message);
-        }
-    }
-    else
-    {
-        if (current && !previous)
-        {
-            Log("press: %s", message.c_str());
-            MessageHandler::Send(message);
-        }
-    }
-
-    previous = current;
-}
 
     void InputController::UpdateLeftStick()
     {

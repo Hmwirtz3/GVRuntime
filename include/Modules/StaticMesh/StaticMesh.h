@@ -22,9 +22,18 @@ namespace GV
         uint32_t textureID = 0;
     };
 
+    struct StaticBatch
+    {
+        uint32_t startIndex = 0;
+        uint32_t count = 0;
+        uint32_t textureID = 0;
+        uint32_t vertexCount = 0;
+    };
+
     struct StaticMeshInstance
     {
         std::vector<StaticSubmesh> submeshes;
+        std::vector<StaticBatch> batches;
 
         float posX = 0.0f;
         float posY = 0.0f;
@@ -61,7 +70,7 @@ namespace GV
 
         static void BuildRenderData(
             uint32_t meshIndex,
-            uint32_t submeshIndex,
+            uint32_t batchIndex,
             void* dst
         );
 
@@ -71,5 +80,8 @@ namespace GV
 
         static uint32_t GetCount();
         static const StaticMeshInstance& Get(uint32_t index);
+
+    private:
+        static void BuildBatches();
     };
 }
