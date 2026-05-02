@@ -7,6 +7,8 @@
 #include "Modules/StaticMesh/StaticMesh.h"
 #include "Modules/Camera/Camera.h"
 #include "Modules/ControlInput/Controller.h"
+#include "Modules/AreaTriggerBox/AreaTriggerBox.h"
+#include "Modules/Audio/AudioSource.h"
 
 namespace GV
 {
@@ -35,6 +37,12 @@ namespace GV
                     break;
                 case 0x0014:
                     InputController::Load(bytes, item.start, item.end);
+                    break;
+                case 0x0012:
+                    AreaTriggerBox::Load(bytes, item.start, item.end);
+                    break;
+                case 0x0035:
+                    AudioSource::Load(bytes, item.start, item.end);
                     break;
 
                 default:

@@ -31,7 +31,7 @@ void Font_End();
 void BeginUI();
 
 // rendering
-void DrawText(const char* text, float x, float y, uint32_t color);
+void DrawText(const char* text, float x, float y, float scale, uint32_t color);
 
 // debug logging
 void Log(const char* fmt, ...);

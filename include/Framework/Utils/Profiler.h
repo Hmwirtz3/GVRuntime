@@ -103,7 +103,7 @@ inline void Profiler_Draw(float x, float y)
             ms,
             e.calls);
 
-        DrawText(buf, x, y, 0xFFFFFF00);
+        DrawText(buf, x, y, 1.0f, 0xFFFFFF00);
         y += 17.0f;
     }
 }

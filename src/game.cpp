@@ -5,6 +5,9 @@
 #include "Renderer/Renderer.h"
 #include "Modules/Camera/CameraSystem.h"
 #include "Modules/ControlInput/Controller.h"
+#include "Modules/AreaTriggerBox/AreaTriggerBox.h"
+#include "Modules/Audio/AudioSource.h"
+
 #include "Font/FontRenderer.h"
 #include "Font/FontAtlas.h"
 #include "Framework/Utils/Profiler.h"
@@ -134,9 +137,9 @@ namespace GV
             if (selectPressed && !prevSelectPressed)
             {
                 if (journalOpen)
-                    MessageHandler::Send("CloseJournal");
+                    MessageHandler::Send("CullGate");
                 else
-                    MessageHandler::Send("RenderJournal");
+                    MessageHandler::Send("StopCull");
 
                 journalOpen = !journalOpen;
             }
@@ -161,6 +164,8 @@ namespace GV
             Renderer::BeginFrame();
             Renderer::DrawStaticMeshes();
             Renderer::DrawQuads();
+            AreaTriggerBox::Update();
+            AudioSource::Update();
             Renderer::EndFrame();
 
             BeginUI();
@@ -169,12 +174,12 @@ namespace GV
 
             if (!hideMenuText)
             {
-                DrawText("Continue", 60.0f, 200.0f, 0xFF5A6F86);
-                DrawText("New",      140.0f, 200.0f, 0xFF2F3E4E);
-                DrawText("Load",     200.0f, 200.0f, 0xFF2F3E4E);
-                DrawText("Options",  260.0f, 200.0f, 0xFF2F3E4E);
-                DrawText("Credits",  340.0f, 200.0f, 0xFF2F3E4E);
-                DrawText("Exit",     420.0f, 200.0f, 0xFF2F3E4E);
+                DrawText("Continue", 60.0f, 200.0f, 1.0f, 0xFF5A6F86);
+                DrawText("New",      140.0f, 200.0f, 1.0f, 0xFF2F3E4E);
+                DrawText("Load",     200.0f, 200.0f, 1.00f, 0xFF2F3E4E);
+                DrawText("Options",  260.0f, 200.0f, 1.0f, 0xFF2F3E4E);
+                DrawText("Credits",  340.0f, 200.0f, 1.0f, 0xFF2F3E4E);
+                DrawText("Exit",     420.0f, 200.0f, 1.0f, 0xFF2F3E4E);
             }
 
             DrawDebug();

@@ -234,7 +234,7 @@ namespace GV
             if (!e.valid)
                 continue;
 
-            if (e.ownerIndex == ownerIndex)
+            if (e.ownerIndex == ownerIndex && e.type == type)
                 return (int32_t)i;
         }
 

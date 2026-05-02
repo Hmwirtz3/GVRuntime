@@ -5,6 +5,8 @@
 #include "Modules/Camera/Camera.h"
 #include "Modules/StaticMesh/StaticMesh.h"
 #include "Modules/ControlInput/Controller.h"
+#include "Modules/AreaTriggerBox/AreaTriggerBox.h"
+#include "Modules/Audio/AudioSource.h"
 
 namespace GV
 {
@@ -40,6 +42,12 @@ namespace GV
 
                 case GV_CHUNK_STATIC_MESH:
                     StaticMesh::HandleMessage(t.index, msg);
+                    break;
+                case GV_CHUNK_AREA_TRIGGER_BOX:
+                    AreaTriggerBox::HandleMessage(t.index, msg);
+                    break;
+                case GV_CHUNK_AUDIO_SOURCE:
+                    AudioSource::HandleMessage(t.index, msg);
                     break;
 
                 default:

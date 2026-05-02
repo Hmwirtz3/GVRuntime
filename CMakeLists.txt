@@ -43,7 +43,7 @@ set(SOURCES
     src/Renderer/Renderer.cpp
 
     src/Font/FontRenderer.cpp 
-    src/Font/FontAtlas.cpp
+    src/Font/FontAtlas2.cpp
 
     src/Modules/ControlInput/Controller.cpp
     src/Modules/TextureDictionary/TextureDictionary.cpp
@@ -51,6 +51,8 @@ set(SOURCES
     src/Modules/StaticMesh/StaticMesh.cpp
     src/Modules/Camera/Camera.cpp 
     src/Modules/Camera/CameraSystem.cpp 
+    src/Modules/AreaTriggerBox/AreaTriggerBox.cpp 
+    src/Modules/Audio/AudioSource.cpp 
 
 
 
@@ -93,6 +95,9 @@ target_link_libraries(${PROJECT_NAME}
     pspgum
     pspdisplay
     pspctrl
+    pspmp3
+    pspaudio
+    pspaudiolib
     pspdebug
     pspge
     pspvfpu

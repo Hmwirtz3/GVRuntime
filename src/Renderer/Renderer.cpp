@@ -1,6 +1,6 @@
 #include "Renderer/Renderer.h"
+#define PROFILER_USE_STUB
 #include "Framework/Utils/Profiler.h"
-
 #include "Modules/UI/TexturedQuad.h"
 #include "Modules/StaticMesh/StaticMesh.h"
 #include "Modules/TextureDictionary/TextureDictionary.h"

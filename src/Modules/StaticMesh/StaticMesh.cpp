@@ -1,17 +1,54 @@
 #include "Modules/StaticMesh/StaticMesh.h"
 #include "Framework/Chunk/ChunkTypes.h"
 #include "Framework/Utils/BinaryReader.h"
+#include "Framework/MessageHandler/MessageHandler.h"
+#include "Font/FontRenderer.h"
 
 #include <algorithm>
+#include <cstring>
+
+static uint32_t g_meshCount = 0;
 
 namespace GV
 {
     static std::vector<StaticMeshInstance> g_meshes;
     static bool g_batchesBuilt = false;
 
-    static void Align16(const uint8_t*& ptr)
+    static void Align16(const uint8_t*& ptr, const uint8_t* endPtr)
     {
-        ptr = (const uint8_t*)(((uintptr_t)ptr + 15) & ~15);
+        uintptr_t p = (uintptr_t)ptr;
+        p = (p + 15) & ~15;
+
+        const uint8_t* aligned = (const uint8_t*)p;
+
+        if (aligned <= endPtr)
+            ptr = aligned;
+    }
+
+    static bool ReadUInt32Safe(const uint8_t*& ptr, const uint8_t* endPtr, uint32_t& out)
+    {
+        if (ptr + sizeof(uint32_t) > endPtr)
+            return false;
+
+        std::memcpy(&out, ptr, sizeof(uint32_t));
+        ptr += sizeof(uint32_t);
+        return true;
+    }
+
+    static bool ReadStringSafe(const uint8_t*& ptr, const uint8_t* endPtr, std::string& out)
+    {
+        uint32_t len = 0;
+
+        if (!ReadUInt32Safe(ptr, endPtr, len))
+            return false;
+
+        if (ptr + len > endPtr)
+            return false;
+
+        out.assign((const char*)ptr, len);
+        ptr += len;
+
+        return true;
     }
 
     void StaticMesh::BuildBatches()
@@ -79,41 +116,43 @@ namespace GV
         const uint8_t* ptr    = base + start;
         const uint8_t* endPtr = base + end;
 
+        if (ptr >= endPtr)
+            return;
+
+        ptr += sizeof(GV_ChunkHeader) + 4;
         ptr += sizeof(GV_ChunkHeader) + 4;
 
-        const GV_ChunkHeader* outerHeader = (const GV_ChunkHeader*)ptr;
-        ptr += sizeof(GV_ChunkHeader) + 4;
-
-        uint32_t paramCount = ReadUInt32(ptr);
+        uint32_t paramCount = 0;
+        if (!ReadUInt32Safe(ptr, endPtr, paramCount))
+            return;
 
         StaticMeshInstance mesh{};
+        mesh.visible = true;
 
-        if (paramCount >= 9)
-        {
-            mesh.posX = ReadFloat(ptr);
-            mesh.posY = ReadFloat(ptr);
-            mesh.posZ = ReadFloat(ptr);
-
-            mesh.rotX = ReadFloat(ptr);
-            mesh.rotY = ReadFloat(ptr);
-            mesh.rotZ = ReadFloat(ptr);
-
-            mesh.scaleX = ReadFloat(ptr);
-            mesh.scaleY = ReadFloat(ptr);
-            mesh.scaleZ = ReadFloat(ptr);
-        }
-        else
-        {
+        if (paramCount < 9)
             return;
+
+        mesh.posX = ReadFloat(ptr);
+        mesh.posY = ReadFloat(ptr);
+        mesh.posZ = ReadFloat(ptr);
+
+        mesh.rotX = ReadFloat(ptr);
+        mesh.rotY = ReadFloat(ptr);
+        mesh.rotZ = ReadFloat(ptr);
+
+        mesh.scaleX = ReadFloat(ptr);
+        mesh.scaleY = ReadFloat(ptr);
+        mesh.scaleZ = ReadFloat(ptr);
+
+        if (paramCount > 9)
+        {
+            if (!ReadStringSafe(ptr, endPtr, mesh.visibilityMessage))
+                return;
         }
 
-        Align16(ptr);
-
-        if (ptr + sizeof(GV_ChunkHeader) > endPtr)
-            return;
+        Align16(ptr, endPtr);
 
         const GV_ChunkHeader* innerWrapper = (const GV_ChunkHeader*)ptr;
-
         if (innerWrapper->type != GV_CHUNK_STATIC_MESH)
             return;
 
@@ -127,39 +166,29 @@ namespace GV
         PSPVertex* pendingVerts = nullptr;
         uint32_t pendingCount = 0;
 
-        while (ptr < innerEnd && ptr < endPtr)
+        while (ptr < innerEnd)
         {
-            if (ptr + sizeof(GV_ChunkHeader) > innerEnd)
-                break;
-
             const GV_ChunkHeader* h = (const GV_ChunkHeader*)ptr;
             ptr += sizeof(GV_ChunkHeader) + 4;
 
             uint32_t payloadSize = h->size - sizeof(GV_ChunkHeader);
-            const uint8_t* payloadStart = ptr;
-            const uint8_t* nextChunk = payloadStart + payloadSize;
+            const uint8_t* nextChunk = ptr + payloadSize;
 
             switch (h->type)
             {
                 case GV_CHUNK_STRUCT:
-                {
                     ptr += 4;
                     currentVertexCount = *(const uint32_t*)ptr; ptr += 4;
                     ptr += 8;
                     break;
-                }
 
                 case GV_CHUNK_GEOMETRY:
-                {
                     pendingVerts = (PSPVertex*)ptr;
                     pendingCount = currentVertexCount;
-
                     ptr += currentVertexCount * sizeof(PSPVertex);
                     break;
-                }
 
                 case GV_CHUNK_MATERIAL:
-                {
                     currentTextureID = *(const uint32_t*)ptr;
                     ptr += 4;
 
@@ -169,24 +198,33 @@ namespace GV
                         sm.vertices = pendingVerts;
                         sm.vertexCount = pendingCount;
                         sm.textureID = currentTextureID;
-
                         mesh.submeshes.push_back(sm);
 
                         pendingVerts = nullptr;
                         pendingCount = 0;
                     }
                     break;
-                }
-
-                default:
-                    break;
             }
 
             ptr = nextChunk;
-            Align16(ptr);
+            Align16(ptr, innerEnd);
         }
 
-        g_meshes.push_back(mesh);
+        uint32_t index = g_meshCount++;
+
+        if (g_meshes.size() <= index)
+            g_meshes.resize(index + 1);
+
+        g_meshes[index] = mesh;
+
+        if (!g_meshes[index].visibilityMessage.empty())
+        {
+            MessageHandler::Register(
+                g_meshes[index].visibilityMessage,
+                GV_CHUNK_STATIC_MESH,
+                index
+            );
+        }
     }
 
     void StaticMesh::HandleMessage(uint32_t index, const std::string& msg)
@@ -194,12 +232,10 @@ namespace GV
         if (index >= g_meshes.size())
             return;
 
-        g_meshes[index].visible = true;
+        StaticMeshInstance& mesh = g_meshes[index];
+        mesh.visible = !mesh.visible;
     }
 
-    // --------------------------------------------------
-    // IMPORTANT: batch-aware (no memcpy, no merging)
-    // --------------------------------------------------
     void StaticMesh::BuildRenderData(
         uint32_t meshIndex,
         uint32_t batchIndex,
@@ -210,7 +246,6 @@ namespace GV
 
         MeshGpuData* out = (MeshGpuData*)dst;
 
-        // Just use first submesh pointer (renderer loops inside batch)
         const StaticSubmesh& sm = mesh.submeshes[batch.startIndex];
 
         out->textureID = batch.textureID;

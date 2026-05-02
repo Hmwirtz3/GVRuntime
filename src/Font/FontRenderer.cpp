@@ -69,7 +69,9 @@ void Font_Init()
 
     const float fw = (float)FONT_ATLAS_WIDTH;
     const float fh = (float)FONT_ATLAS_HEIGHT;
-    const float inset = 0.25f;
+
+    const float halfU = 0.5f / fw;
+    const float halfV = 0.5f / fh;
 
     for (int i = 0; i < 128; i++)
     {
@@ -94,16 +96,16 @@ void Font_Init()
 
         Glyph& g = m_glyphs[c];
 
-        g.u0 = (r.x + inset) / fw;
-        g.u1 = (r.x + r.w - inset) / fw;
-        g.v0 = (r.y + inset) / fh;
-        g.v1 = (r.y + r.h - inset) / fh;
+        g.u0 = (r.x / fw) + halfU;
+        g.u1 = ((r.x + r.w) / fw) - halfU;
+        g.v0 = (r.y / fh) + halfV;
+        g.v1 = ((r.y + r.h) / fh) - halfV;
 
-        g.width    = r.w;
-        g.height   = r.h;
+        g.width    = (int)((g.u1 - g.u0) * fw);
+        g.height   = (int)((g.v1 - g.v0) * fh);
         g.bearingX = 0;
         g.bearingY = 0;
-        g.advance  = r.w + GLYPH_SPACING;
+        g.advance  = g.width + GLYPH_SPACING;
     }
 
     if (m_glyphs[32].advance == 0)
@@ -173,16 +175,19 @@ void Font_End()
     sceGuDisable(GU_BLEND);
 }
 
-static void DrawChar(const Glyph& g, float x, float y, uint32_t color)
+static void DrawChar(const Glyph& g, float x, float y, float scale, uint32_t color)
 {
     if (!m_vertexBuffer) return;
     if (m_vertexCount + 6 > MAX_FONT_VERTICES) return;
     if (g.width <= 0 || g.height <= 0) return;
 
+    const float drawW = (g.u1 - g.u0) * (float)FONT_ATLAS_WIDTH;
+    const float drawH = (g.v1 - g.v0) * (float)FONT_ATLAS_HEIGHT;
+
     const float x0 = x;
     const float y0 = y;
-    const float x1 = x + (float)g.width;
-    const float y1 = y + (float)g.height;
+    const float x1 = x + drawW * scale;
+    const float y1 = y + drawH * scale;
 
     FontVertex* buf = (FontVertex*)m_vertexBuffer;
     FontVertex* v   = &buf[m_vertexCount];
@@ -198,7 +203,7 @@ static void DrawChar(const Glyph& g, float x, float y, uint32_t color)
     m_vertexCount += 6;
 }
 
-void DrawText(const char* text, float x, float y, uint32_t color)
+void DrawText(const char* text, float x, float y, float scale, uint32_t color)
 {
     const float startX = x;
     const float maxX   = 480.0f - 10.0f;
@@ -213,7 +218,7 @@ void DrawText(const char* text, float x, float y, uint32_t color)
         if (c == '\n')
         {
             penX = startX;
-            penY += (float)LINE_HEIGHT;
+            penY += LINE_HEIGHT * scale;
             continue;
         }
 
@@ -222,14 +227,14 @@ void DrawText(const char* text, float x, float y, uint32_t color)
 
         const Glyph& g = m_glyphs[c];
 
-        if (penX + g.advance > maxX)
+        if (penX + g.advance * scale > maxX)
         {
             penX = startX;
-            penY += (float)LINE_HEIGHT;
+            penY += LINE_HEIGHT * scale;
         }
 
-        DrawChar(g, penX, penY, color);
-        penX += (float)g.advance;
+        DrawChar(g, penX, penY, scale, color);
+        penX += g.advance * scale;
     }
 }
 
@@ -278,12 +283,12 @@ void DrawDebug()
 
     char fpsText[64];
     snprintf(fpsText, sizeof(fpsText), "FPS: %.2f", fps);
-    DrawText(fpsText, 10.0f, y, 0xFF00FFFF);
+    DrawText(fpsText, 10.0f, y, 1.0f, 0xFF00FFFF);
     y += (float)LINE_HEIGHT;
 
     for (const auto& line : m_lines)
     {
-        DrawText(line.c_str(), 10.0f, y, 0xFFFFFFFF);
+        DrawText(line.c_str(), 10.0f, y, 1.0f, 0xFFFFFFFF);
         y += (float)LINE_HEIGHT;
     }
 }

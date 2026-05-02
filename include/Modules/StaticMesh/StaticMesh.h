@@ -49,7 +49,7 @@ namespace GV
 
         bool visible = true;
 
-        std::string activateMessage;
+        std::string visibilityMessage;
     };
 
     struct MeshGpuData
