@@ -101,7 +101,7 @@ namespace GV
                     if (!b.triggerOnce || !b.hasTriggered)
                     {
                         if (!b.onEnter.empty())
-                            MessageHandler::Send(b.onEnter);
+                            MessageHandler::Send(b.onEnter, GV_CHUNK_AREA_TRIGGER_BOX, i);
 
                         if (b.triggerOnce)
                             b.hasTriggered = true;
@@ -115,7 +115,7 @@ namespace GV
                 if (b.isInside)
                 {
                     if (!b.onExit.empty())
-                        MessageHandler::Send(b.onExit);
+                        MessageHandler::Send(b.onExit, GV_CHUNK_AREA_TRIGGER_BOX, i);
                 }
 
                 b.isInside = false;
@@ -126,7 +126,12 @@ namespace GV
         }
     }
 
-    void AreaTriggerBox::HandleMessage(uint32_t index, const std::string& msg)
+    void AreaTriggerBox::HandleMessage(uint32_t index,
+                                       const std::string& msg,
+                                       uint32_t senderType,
+                                       uint32_t senderIndex,
+                                       const void* payload,
+                                       uint32_t payloadSize)
     {
         if (index >= g_triggers.size())
             return;

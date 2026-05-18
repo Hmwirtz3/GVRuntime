@@ -75,7 +75,13 @@ namespace GV
     public:
         static void Load(const std::vector<uint8_t>& bytes, uint32_t start, uint32_t end);
         static void Update();
-        static void HandleMessage(int index, const std::string& msg);
+        static void HandleMessage(uint32_t index,
+                          const std::string& msg,
+                          uint32_t senderType,
+                          uint32_t senderIndex,
+                          const void* payload,
+                          uint32_t payloadSize);
+                          
         static int FindInstanceIndex(AudioSourceInstance& inst);
 
     private:

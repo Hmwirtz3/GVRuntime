@@ -34,7 +34,7 @@ namespace GV
 
         std::string activateMessage;
         std::string deactivateMessage;
-        
+        std::string toggleMessage;
 
         uint32_t textureID;
 
@@ -42,17 +42,17 @@ namespace GV
     };
 
     struct QuadVertex
-{
-    float u, v;
-    float x, y, z;
-    //float u, v;
-};
+    {
+        float u, v;
+        float x, y, z;
+    };
 
-struct QuadGpuData
-{
-    QuadVertex verts[6];
-    uint32_t textureID;
-};
+    struct QuadGpuData
+    {
+        QuadVertex verts[6];
+        uint32_t textureID;
+        uint32_t color;
+    };
 
     class TexturedQuad
     {
@@ -63,7 +63,13 @@ struct QuadGpuData
             uint32_t end
         );
 
-        static void HandleMessage(uint32_t index, const std::string& msg);
+        static void HandleMessage(uint32_t index,
+                                  const std::string& msg,
+                                  uint32_t senderType,
+                                  uint32_t senderIndex,
+                                  const void* payload,
+                                  uint32_t payloadSize);
+
         static void BuildRenderData(uint32_t index, void* dst);
         static uint32_t GetCount();
         static const TexturedQuadData& Get(uint32_t index);

@@ -14,6 +14,10 @@ namespace GV
             uint32_t start,
             uint32_t end);
 
-        static void Bind(uint32_t textureID);
+        static bool Bind(uint32_t textureID);
+
+                
+
+
     };
 }

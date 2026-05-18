@@ -1,8 +1,10 @@
 #include "Modules/ControlInput/Controller.h"
+//#include "Modules/Networking/Network.h"
 
 #include "Framework/Utils/BinaryReader.h"
 #include "Framework/Chunk/ChunkTypes.h"
 #include "Framework/MessageHandler/MessageHandler.h"
+#include "Modules/Camera/CameraSystem.h"
 
 #include <pspctrl.h>
 #include <cmath>
@@ -10,6 +12,7 @@
 namespace GV
 {
     static InputControllerData g_input;
+    static InputController g_controller;
 
     static void Align16(const uint8_t*& ptr)
     {
@@ -102,8 +105,33 @@ namespace GV
         Align16(ptr);
     }
 
-    void InputController::HandleMessage(uint32_t, const std::string&)
+    const InputControllerData& InputController::Get()
     {
+        return g_input;
+    }
+
+    InputController& InputController::GetController()
+    {
+        return g_controller;
+    }
+
+    void InputController::HandleMessage(uint32_t,
+                                        const std::string& msg,
+                                        uint32_t senderType,
+                                        uint32_t senderIndex,
+                                        const void* payload,
+                                        uint32_t payloadSize)
+    {
+        if (msg == "Ping")
+        {
+            //Network::QueuePacket("Pong", GV_CHUNK_CONTROLLER, 0, nullptr, 0);
+            return;
+        }
+
+        if (msg == "Pong")
+        {
+            return;
+        }
     }
 
     void InputController::OnStart()
@@ -116,6 +144,7 @@ namespace GV
     {
         UpdateButtons();
         UpdateLeftStick();
+        UpdateCameraControls();
         UpdateRightStick();
     }
 
@@ -156,14 +185,18 @@ namespace GV
         if (continuous)
         {
             if (current)
-                MessageHandler::Send(message);
+            {
+                MessageHandler::Send(message, GV_CHUNK_CONTROLLER, 0);
+            }
         }
         else
         {
             if (current && !previous)
-                MessageHandler::Send(message);
+            {
+                MessageHandler::Send(message, GV_CHUNK_CONTROLLER, 0);
+            }
         }
-        
+
         previous = current;
     }
 
@@ -172,30 +205,83 @@ namespace GV
         SceCtrlData pad{};
         sceCtrlPeekBufferPositive(&pad, 1);
 
-        float x = ((int)pad.Lx - 128) / 128.0f;
-        float y = ((int)pad.Ly - 128) / 128.0f;
+        float ax = ((int)pad.Lx - 128) / 128.0f;
+        float ay = ((int)pad.Ly - 128) / 128.0f;
 
-        x = ApplyDeadZone(x, g_input.LeftStick_DeadZone);
-        y = ApplyDeadZone(y, g_input.LeftStick_DeadZone);
+        const float deadzone = 0.15f;
+
+        if (ax > -deadzone && ax < deadzone)
+            ax = 0.0f;
+
+        if (ay > -deadzone && ay < deadzone)
+            ay = 0.0f;
 
         if (g_input.LeftStick_InvertX)
-            x = -x;
+            ax = -ax;
 
         if (g_input.LeftStick_InvertY)
-            y = -y;
+            ay = -ay;
 
-        x = ApplyResponse(x, g_input.LeftStick_Sensitivity, g_input.LeftStick_Expo);
-        y = ApplyResponse(y, g_input.LeftStick_Sensitivity, g_input.LeftStick_Expo);
+        ax = ApplyResponse(
+            ax,
+            g_input.LeftStick_Sensitivity,
+            g_input.LeftStick_Expo);
 
-        x = ApplyClamp(x, g_input.LeftStick_Min, g_input.LeftStick_Max);
-        y = ApplyClamp(y, g_input.LeftStick_Min, g_input.LeftStick_Max);
+        ay = ApplyResponse(
+            ay,
+            g_input.LeftStick_Sensitivity,
+            g_input.LeftStick_Expo);
+
+        ax = ApplyClamp(
+            ax,
+            g_input.LeftStick_Min,
+            g_input.LeftStick_Max);
+
+        ay = ApplyClamp(
+            ay,
+            g_input.LeftStick_Min,
+            g_input.LeftStick_Max);
+
+        const float moveSpeed = 0.15f;
+
+        CameraSystem::MoveForward(
+            ay * moveSpeed);
+
+        CameraSystem::MoveRight(
+            ax * moveSpeed);
+    }
+
+    void InputController::UpdateCameraControls()
+    {
+        SceCtrlData pad{};
+        sceCtrlPeekBufferPositive(&pad, 1);
+
+        const float moveSpeed = 0.15f;
+        const float rotSpeed  = 0.01f;
+
+        if (pad.Buttons & PSP_CTRL_LTRIGGER)
+            CameraSystem::AddRotation(0.0f, rotSpeed);
+
+        if (pad.Buttons & PSP_CTRL_RTRIGGER)
+            CameraSystem::AddRotation(0.0f, -rotSpeed);
+
+        if (pad.Buttons & PSP_CTRL_TRIANGLE)
+            CameraSystem::MoveUp(moveSpeed);
+
+        if (pad.Buttons & PSP_CTRL_CROSS)
+            CameraSystem::MoveUp(-moveSpeed);
+
+        if (pad.Buttons & PSP_CTRL_SQUARE)
+            CameraSystem::AddRotation(rotSpeed, 0.0f);
     }
 
     void InputController::UpdateRightStick()
     {
     }
 
-    float InputController::ApplyDeadZone(float value, float deadZone)
+    float InputController::ApplyDeadZone(
+        float value,
+        float deadZone)
     {
         if (value > -deadZone && value < deadZone)
             return 0.0f;
@@ -203,7 +289,10 @@ namespace GV
         return value;
     }
 
-    float InputController::ApplyResponse(float value, float sensitivity, float expo)
+    float InputController::ApplyResponse(
+        float value,
+        float sensitivity,
+        float expo)
     {
         float v = value;
 
@@ -215,7 +304,10 @@ namespace GV
         return v * sensitivity;
     }
 
-    float InputController::ApplyClamp(float value, float minVal, float maxVal)
+    float InputController::ApplyClamp(
+        float value,
+        float minVal,
+        float maxVal)
     {
         if (value < minVal)
             return minVal;

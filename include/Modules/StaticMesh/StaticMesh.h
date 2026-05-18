@@ -76,7 +76,12 @@ namespace GV
 
         static void Finalize();
 
-        static void HandleMessage(uint32_t index, const std::string& msg);
+        static void HandleMessage(uint32_t index,
+                          const std::string& msg,
+                          uint32_t senderType,
+                          uint32_t senderIndex,
+                          const void* payload,
+                          uint32_t payloadSize);
 
         static uint32_t GetCount();
         static const StaticMeshInstance& Get(uint32_t index);

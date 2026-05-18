@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -113,22 +112,50 @@ namespace GV
     class InputController
     {
     public:
-        static void Load(const std::vector<uint8_t>& bytes, uint32_t start, uint32_t end);
-        static void HandleMessage(uint32_t, const std::string&);
+        static void Load(
+            const std::vector<uint8_t>& bytes,
+            uint32_t start,
+            uint32_t end);
+
+        static void HandleMessage(
+            uint32_t,
+            const std::string&,
+            uint32_t senderType,
+            uint32_t senderIndex,
+            const void* payload,
+            uint32_t payloadSize);
 
         void OnStart();
         void OnUpdate(float dt);
 
+        static const InputControllerData& Get();
+        static InputController& GetController();
+
     private:
         void UpdateButtons();
         void UpdateLeftStick();
+        void UpdateCameraControls();
         void UpdateRightStick();
 
-        void HandleButton(bool current, bool& previous, const std::string& message, bool continuous);
+        void HandleButton(
+            bool current,
+            bool& previous,
+            const std::string& message,
+            bool continuous);
 
-        float ApplyDeadZone(float value, float deadZone);
-        float ApplyResponse(float value, float sensitivity, float expo);
-        float ApplyClamp(float value, float minVal, float maxVal);
+        float ApplyDeadZone(
+            float value,
+            float deadZone);
+
+        float ApplyResponse(
+            float value,
+            float sensitivity,
+            float expo);
+
+        float ApplyClamp(
+            float value,
+            float minVal,
+            float maxVal);
 
     private:
         bool m_prevCross{};

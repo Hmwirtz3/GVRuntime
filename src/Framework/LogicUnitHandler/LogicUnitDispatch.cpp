@@ -4,11 +4,16 @@
 
 #include "Modules/TextureDictionary/TextureDictionary.h"
 #include "Modules/UI/TexturedQuad.h"
+#include "Modules/UI/Button.h"
+#include "Modules/UI/Crosshair.h"
+#include "Modules/UI/ScrollingMap.h"
 #include "Modules/StaticMesh/StaticMesh.h"
 #include "Modules/Camera/Camera.h"
 #include "Modules/ControlInput/Controller.h"
 #include "Modules/AreaTriggerBox/AreaTriggerBox.h"
+#include "Modules/ZoneTrigger/ZoneTrigger.h"
 #include "Modules/Audio/AudioSource.h"
+#include "Modules/MessageRelay/MessageRelay.h"
 
 namespace GV
 {
@@ -44,6 +49,21 @@ namespace GV
                 case 0x0035:
                     AudioSource::Load(bytes, item.start, item.end);
                     break;
+                case 0x0040:
+                    Button::Load(bytes, item.start, item.end);
+                    break;
+                case 0x0042:
+                    Crosshair::Load(bytes, item.start, item.end);
+                    break;
+                case 0x0044:
+                    ZoneTrigger::Load(bytes, item.start, item.end);
+                    break;
+                case 0x0043:
+                    MessageRelay::Load(bytes, item.start, item.end);
+                    break;    
+                case 0x0045:
+                    ScrollingMap::Load(bytes, item.start, item.end);
+                    break;                                      
 
                 default:
                     break;

@@ -4,6 +4,7 @@
 #include "Framework/MessageHandler/MessageHandler.h"
 #include "Renderer/Renderer.h"
 #include "Modules/Camera/CameraSystem.h"
+#include "Modules/UI/Button.h"
 #include "Modules/ControlInput/Controller.h"
 #include "Modules/AreaTriggerBox/AreaTriggerBox.h"
 #include "Modules/Audio/AudioSource.h"
@@ -28,7 +29,6 @@ namespace GV
     }
 
     static uint8_t g_renderMemory[2 * 1024 * 1024];
-    static InputController g_controller;
 
     bool Game::Initialize()
     {
@@ -47,15 +47,17 @@ namespace GV
         Renderer::Init(g_renderMemory, sizeof(g_renderMemory));
 
         SceneFile scene;
+        SceneFile player;
 
         CameraSystem::Clear();
 
-        if (!SceneLoader::Load("Anticlere.bin", scene))
+        if (!SceneLoader::Load("Player.bin", player))
             return false;
 
-        g_controller.OnStart();
+        if (!SceneLoader::Load("UI.bin", scene))
+            return false;
 
-        MessageHandler::Send("RenderCamera2");
+        InputController::GetController().OnStart();
 
         InitFontGlyphs();
         Font_Init();
@@ -91,58 +93,9 @@ namespace GV
 
             SceCtrlData pad{};
 
-            g_controller.OnUpdate(0.0f);
+            InputController::GetController().OnUpdate(0.0f);
+
             sceCtrlPeekBufferPositive(&pad, 1);
-
-            float ax = (pad.Lx - 128) / 128.0f;
-            float ay = (pad.Ly - 128) / 128.0f;
-
-            const float deadzone = 0.15f;
-
-            if (ax > -deadzone && ax < deadzone)
-                ax = 0.0f;
-
-            if (ay > -deadzone && ay < deadzone)
-                ay = 0.0f;
-
-            float moveSpeed = 0.15f;
-            float rotSpeed  = 0.01f;
-
-            if (pad.Buttons & PSP_CTRL_LTRIGGER)
-                CameraSystem::AddRotation(0.0f, rotSpeed);
-
-            if (pad.Buttons & PSP_CTRL_RTRIGGER)
-                CameraSystem::AddRotation(0.0f, -rotSpeed);
-
-            CameraSystem::MoveForward(ay * moveSpeed);
-            CameraSystem::MoveRight(ax * moveSpeed);
-
-            if (pad.Buttons & PSP_CTRL_TRIANGLE)
-                CameraSystem::MoveUp(moveSpeed);
-
-            if (pad.Buttons & PSP_CTRL_CROSS)
-                CameraSystem::MoveUp(-moveSpeed);
-
-            if (pad.Buttons & PSP_CTRL_SQUARE)
-                CameraSystem::AddRotation(rotSpeed, 0.0f);
-
-            if (pad.Buttons & PSP_CTRL_UP)
-                MessageHandler::Send("RenderCamera2");
-
-            if (pad.Buttons & PSP_CTRL_DOWN)
-                MessageHandler::Send("RenderJournal");
-
-            bool selectPressed = (pad.Buttons & PSP_CTRL_SELECT) != 0;
-
-            if (selectPressed && !prevSelectPressed)
-            {
-                if (journalOpen)
-                    MessageHandler::Send("CullGate");
-                else
-                    MessageHandler::Send("StopCull");
-
-                journalOpen = !journalOpen;
-            }
 
             bool startPressed = (pad.Buttons & PSP_CTRL_START) != 0;
 
@@ -155,17 +108,19 @@ namespace GV
                 if (SceneLoader::Load("Daggerfall.bin", scene2))
                     hideMenuText = true;
 
-                MessageHandler::Send("tests");
+                MessageHandler::DebugSend("DisableMenu");
             }
 
-            prevSelectPressed = selectPressed;
             prevStartPressed = startPressed;
 
             Renderer::BeginFrame();
+
             Renderer::DrawStaticMeshes();
             Renderer::DrawQuads();
+
             AreaTriggerBox::Update();
             AudioSource::Update();
+
             Renderer::EndFrame();
 
             BeginUI();
@@ -174,12 +129,12 @@ namespace GV
 
             if (!hideMenuText)
             {
-                DrawText("Continue", 60.0f, 200.0f, 1.0f, 0xFF5A6F86);
-                DrawText("New",      140.0f, 200.0f, 1.0f, 0xFF2F3E4E);
-                DrawText("Load",     200.0f, 200.0f, 1.00f, 0xFF2F3E4E);
-                DrawText("Options",  260.0f, 200.0f, 1.0f, 0xFF2F3E4E);
-                DrawText("Credits",  340.0f, 200.0f, 1.0f, 0xFF2F3E4E);
-                DrawText("Exit",     420.0f, 200.0f, 1.0f, 0xFF2F3E4E);
+                //DrawText("Continue", 60.0f, 200.0f, 1.0f, 0xFF5A6F86);
+                //DrawText("New",      140.0f, 200.0f, 1.0f, 0xFF2F3E4E);
+                //DrawText("Load",     200.0f, 200.0f, 1.00f, 0xFF2F3E4E);
+                //DrawText("Options",  260.0f, 200.0f, 1.0f, 0xFF2F3E4E);
+                //DrawText("Credits",  340.0f, 200.0f, 1.0f, 0xFF2F3E4E);
+                //DrawText("Exit",     420.0f, 200.0f, 1.0f, 0xFF2F3E4E);
             }
 
             DrawDebug();

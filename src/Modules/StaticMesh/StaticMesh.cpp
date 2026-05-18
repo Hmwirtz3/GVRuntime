@@ -227,31 +227,35 @@ namespace GV
         }
     }
 
-    void StaticMesh::HandleMessage(uint32_t index, const std::string& msg)
-    {
-        if (index >= g_meshes.size())
-            return;
+    void StaticMesh::HandleMessage(uint32_t index,
+                               const std::string& msg,
+                               uint32_t senderType,
+                               uint32_t senderIndex,
+                               const void* payload,
+                               uint32_t payloadSize)
+{
+    if (index >= g_meshes.size())
+        return;
 
-        StaticMeshInstance& mesh = g_meshes[index];
-        mesh.visible = !mesh.visible;
-    }
+    StaticMeshInstance& mesh = g_meshes[index];
+    mesh.visible = !mesh.visible;
+}
 
     void StaticMesh::BuildRenderData(
-        uint32_t meshIndex,
-        uint32_t batchIndex,
-        void* dst)
-    {
-        const StaticMeshInstance& mesh = g_meshes[meshIndex];
-        const StaticBatch& batch = mesh.batches[batchIndex];
+    uint32_t meshIndex,
+    uint32_t submeshIndex,
+    void* dst)
+{
+    const StaticMeshInstance& mesh = g_meshes[meshIndex];
 
-        MeshGpuData* out = (MeshGpuData*)dst;
+    MeshGpuData* out = (MeshGpuData*)dst;
 
-        const StaticSubmesh& sm = mesh.submeshes[batch.startIndex];
+    const StaticSubmesh& sm = mesh.submeshes[submeshIndex];
 
-        out->textureID = batch.textureID;
-        out->vertexCount = sm.vertexCount;
-        out->verts = sm.vertices;
-    }
+    out->textureID = sm.textureID;
+    out->vertexCount = sm.vertexCount;
+    out->verts = sm.vertices;
+}
 
     uint32_t StaticMesh::GetCount()
     {

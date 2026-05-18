@@ -103,13 +103,17 @@ namespace GV
         CameraSystem::AddCamera(cam);
     }
 
-    void Camera::HandleMessage(uint32_t index, const std::string& msg)
-    {
-        WriteLog("[Camera::HandleMessage] index=%u msg=%s\n", index, msg.c_str());
+    void Camera::HandleMessage(uint32_t index,
+                           const std::string& msg,
+                           uint32_t senderType,
+                           uint32_t senderIndex,
+                           const void* payload,
+                           uint32_t payloadSize)
+{
+    WriteLog("[Camera::HandleMessage] index=%u msg=%s\n", index, msg.c_str());
 
-        // No comparison here — routing already handled it
-        WriteLog("  Activating camera %u\n", index);
+    WriteLog("  Activating camera %u\n", index);
 
-        CameraSystem::SetActiveCamera(index);
-    }
+    CameraSystem::SetActiveCamera(index);
+}
 }

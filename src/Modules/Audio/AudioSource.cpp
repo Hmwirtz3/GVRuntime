@@ -625,29 +625,34 @@ namespace GV
         ReleaseMixChannelIfIdle();
     }
 
-    void AudioSource::HandleMessage(int index, const std::string& msg)
+   void AudioSource::HandleMessage(uint32_t index,
+                                const std::string& msg,
+                                uint32_t senderType,
+                                uint32_t senderIndex,
+                                const void* payload,
+                                uint32_t payloadSize)
+{
+    if (index >= (uint32_t)s_count)
+        return;
+
+    AudioSourceInstance& inst = s_instances[index];
+
+    if (!inst.playMsg.empty() && msg == inst.playMsg)
     {
-        if (index < 0 || index >= s_count)
-            return;
-
-        AudioSourceInstance& inst = s_instances[index];
-
-        if (!inst.playMsg.empty() && msg == inst.playMsg)
-        {
-            Start(inst, index);
-            return;
-        }
-
-        if (!inst.stopMsg.empty() && msg == inst.stopMsg)
-        {
-            Stop(inst, index);
-            return;
-        }
-
-        if (!inst.pauseMsg.empty() && msg == inst.pauseMsg)
-        {
-            Pause(inst);
-            return;
-        }
+        Start(inst, index);
+        return;
     }
+
+    if (!inst.stopMsg.empty() && msg == inst.stopMsg)
+    {
+        Stop(inst, index);
+        return;
+    }
+
+    if (!inst.pauseMsg.empty() && msg == inst.pauseMsg)
+    {
+        Pause(inst);
+        return;
+    }
+}
 }
